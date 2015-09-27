@@ -12,8 +12,12 @@ import (
 	"net/http"
 	"strconv"
 	"time"
+	"unicode/utf8"
 )
 
+// makeRequest is a helper function that takes the parameters as a string and
+// executes the http request returning any errors, or nil and the body as a
+// byte array
 func makeRequest(params string) ([]byte, error) {
 	url := urlBuilder()
 	// Params is a string above and must be turned into a byte array to be sent
@@ -94,12 +98,10 @@ func AvailableSIDS() (map[string]string, error) {
 }
 
 // GetSID ...
-func GetSID(sid string) (string, error) {
-
-	params := fmt.Sprintf(constants.GetSIDSRequest, sid)
+func GetSID(sidKey string) (string, error) {
+	params := fmt.Sprintf(constants.GetSIDSRequest, sidKey)
 	b, err := makeRequest(params)
 
-	// If we can't read the response return err
 	if err != nil {
 		return ``, err
 	}
@@ -108,9 +110,12 @@ func GetSID(sid string) (string, error) {
 	if err := json.Unmarshal(b, &sidResponse); err != nil {
 		return ``, err
 	}
-	pretty.Println(sidResponse)
-	return sidResponse.Result.Sid, nil
 
+	sid := sidResponse.Result.Sid
+	if utf8.RuneCountInString(sid) == 0 {
+		return ``, errors.New("No SID found")
+	}
+	return sid, nil
 }
 
 // GetMenuList ...
