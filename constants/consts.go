@@ -21,3 +21,13 @@ const GetSIDSRequest string = `{
   "id": 2,
   "params": ["%s"]
 }`
+
+// GetMenuListRequest ...
+const GetMenuListRequest string = `{
+  "service": "",
+  "method": "get_webmenu_list",
+  "id": 5,
+  "params": [{
+    "sid":"%s"
+  }, "{\"remoteProcedure\":\"get_webmenu_list\"}"]
+}`

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/jesusrmoreno/nutrition-scraper/constants"
+	"github.com/kr/pretty"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -13,15 +14,61 @@ import (
 	"time"
 )
 
+// We're making the errors a string because if there is an error we probably
+// need a code rewrite anyway... No point in doing type assertions when all
+// we need to know is whether or not an error exists.
+
 // AvailableSIDSResponse is the structure of the JSON we're expecting to get
 // back when we query for the AvailableSIDs ie: DDS, NOVACK, etc..
 type AvailableSIDSResponse struct {
-	Err    string `json:"error"`
+	Error  string `json:"error"`
 	ID     int    `json:"id"`
 	Result struct {
 		CWPVersion string     `json:"cwp_version"`
 		Result     [][]string `json:"result"`
 	} `json:"result"`
+}
+
+// MenuListResponse ...
+type MenuListResponse struct {
+	Error  interface{} `json:"error"`
+	ID     int         `json:"id"`
+	Result struct {
+		MenusList [][]interface{} `json:"menus_list"`
+	} `json:"result"`
+}
+
+// SIDResponse ...
+type SIDResponse struct {
+	Error  string `json:"error"`
+	ID     int    `json:"id"`
+	Result struct {
+		Sid string `json:"sid"`
+	} `json:"result"`
+}
+
+func makeRequest(params string) ([]byte, error) {
+	url := urlBuilder()
+	// Params is a string above and must be turned into a byte array to be sent
+	// with http.Post
+	byteParams := []byte(params)
+	res, err := http.Post(url, "application/json", bytes.NewBuffer(byteParams))
+
+	// If there is an error making the POST request return the error
+	if err != nil {
+		return []byte{}, err
+	}
+
+	// Read the body into b, b will be a byte array representation of the
+	// response
+	b, err := ioutil.ReadAll(res.Body)
+
+	// If we can't read the response return err
+	if err != nil {
+		return []byte{}, err
+	}
+
+	return b, nil
 }
 
 // GetFoodInfo ...
@@ -44,28 +91,13 @@ func urlBuilder() string {
 //  CYC: Courtyard Cafe
 func AvailableSIDS() (map[string]string, error) {
 
-	url := urlBuilder()
-
+	availablesIDs := map[string]string{}
 	// The JSON string copied from the Nutrition Website request
 	params := constants.AvailableSIDSRequest
 
-	// Params is a string above and must be turned into a byte array to be sent
-	// with http.Post
-	byteParams := []byte(params)
-	res, err := http.Post(url, "application/json", bytes.NewBuffer(byteParams))
-
-	// If there is an error making the POST request return the error
+	b, err := makeRequest(params)
 	if err != nil {
-		return map[string]string{}, err
-	}
-
-	// Read the body into b, b will be a byte array representation of the
-	// response
-	b, err := ioutil.ReadAll(res.Body)
-
-	// If we can't read the response return err
-	if err != nil {
-		return map[string]string{}, err
+		return availablesIDs, err
 	}
 
 	// Create a struct to hold the response. This allows us to see whether the
@@ -73,60 +105,61 @@ func AvailableSIDS() (map[string]string, error) {
 	// to return early since we can't do anything with it anyway
 	response := AvailableSIDSResponse{}
 	if err := json.Unmarshal(b, &response); err != nil {
-		return map[string]string{}, err
-	}
-	if response.Err != `` {
-		return map[string]string{}, errors.New(response.Err)
+		return availablesIDs, err
 	}
 
-	sidMap := map[string]string{}
 	for _, sidArray := range response.Result.Result {
 		// sidArray[0] currently holds the sid and sidArray[1] holds the display
 		// name. This might change in the future but such is the nature of scrapers
-		sidMap[sidArray[0]] = sidArray[1]
+		availablesIDs[sidArray[0]] = sidArray[1]
 		// We can't check if it indeed holds anything so this will panic if it
 		// can't read in the array.
 	}
 
 	// If the map is empty we know something went wrong so we return an error.
-	if len(sidMap) == 0 {
-		return map[string]string{}, errors.New("No new possible sids")
+	if len(availablesIDs) == 0 {
+		return availablesIDs, errors.New("No new possible sids")
 	}
 
 	// If we made it this far then our map should contain key:value pairs
 	// with the sid:displayName
-	return sidMap, nil
+	return availablesIDs, nil
 }
 
 // GetSID ...
 func GetSID(sid string) (string, error) {
 
 	params := fmt.Sprintf(constants.GetSIDSRequest, sid)
-	url := urlBuilder()
-
-	// The JSON string copied from the Nutrition Website request
-	// params := constants.AvailableSIDSRequest
-
-	// Params is a string above and must be turned into a byte array to be sent
-	// with http.Post
-	byteParams := []byte(params)
-	res, err := http.Post(url, "application/json", bytes.NewBuffer(byteParams))
-
-	// If there is an error making the POST request return the error
-	if err != nil {
-		return ``, err
-	}
-
-	// Read the body into b, b will be a byte array representation of the
-	// response
-	b, err := ioutil.ReadAll(res.Body)
+	b, err := makeRequest(params)
 
 	// If we can't read the response return err
 	if err != nil {
 		return ``, err
 	}
-	log.Println(string(b))
 
+	sidResponse := SIDResponse{}
+	if err := json.Unmarshal(b, &sidResponse); err != nil {
+		return ``, err
+	}
+	pretty.Println(sidResponse)
+	return sidResponse.Result.Sid, nil
+
+}
+
+// GetMenuList ...
+func GetMenuList(sid string) (string, error) {
+	params := fmt.Sprintf(constants.GetMenuListRequest, sid)
+	b, err := makeRequest(params)
+	// If we can't read the response return err
+	if err != nil {
+		return ``, err
+	}
+
+	menuList := MenuListResponse{}
+	if err := json.Unmarshal(b, &menuList); err != nil {
+		return ``, err
+	}
+	pretty.Println(menuList)
 	return ``, nil
 }
 
@@ -135,21 +168,21 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	log.Println(sids)
-	for key, _ := range sids {
-		GetSID(key)
-		time.Sleep(2 * time.Second)
+
+	for key := range sids {
+		fmt.Println()
+		sid, err := GetSID(key)
+		// If there is an error getting the SID we want to continue getting them
+		// for others in case it is a one off thing.
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+		GetMenuList(sid)
+		// time.Sleep(2 * time.Second)
 		// log.Println(key, value)
 	}
-
-	// Get's the different service id ie: Novack and shit
-	// params := `{"service":"","method":"get_available_sids","id":1,"params":[null,"{\"remoteProcedure\":\"get_available_sids\"}"]}`
-
-	// Gets the sID
-	// params :=
-
-	// Gets the menu for the sID
-	// params := `{"service":"","method":"get_webmenu_list","id":5,"params":[{"sid":"DDS.4ef6cc52093e2da095f926af6a241154"},"{\"remoteProcedure\":\"get_webmenu_list\"}"]}`
+	// GetMenuList("Hello")
 
 	// Gets the meal times
 	// params := `{"service":"","method":"get_webmenu_meals_list","id":6,"params":[{"sid":"DDS.4ef6cc52093e2da095f926af6a241154"},"{\"remoteProcedure\":\"get_webmenu_meals_list\"}"]}`
