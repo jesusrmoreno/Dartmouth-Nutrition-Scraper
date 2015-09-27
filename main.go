@@ -14,39 +14,6 @@ import (
 	"time"
 )
 
-// We're making the errors a string because if there is an error we probably
-// need a code rewrite anyway... No point in doing type assertions when all
-// we need to know is whether or not an error exists.
-
-// AvailableSIDSResponse is the structure of the JSON we're expecting to get
-// back when we query for the AvailableSIDs ie: DDS, NOVACK, etc..
-type AvailableSIDSResponse struct {
-	Error  string `json:"error"`
-	ID     int    `json:"id"`
-	Result struct {
-		CWPVersion string     `json:"cwp_version"`
-		Result     [][]string `json:"result"`
-	} `json:"result"`
-}
-
-// MenuListResponse ...
-type MenuListResponse struct {
-	Error  interface{} `json:"error"`
-	ID     int         `json:"id"`
-	Result struct {
-		MenusList [][]interface{} `json:"menus_list"`
-	} `json:"result"`
-}
-
-// SIDResponse ...
-type SIDResponse struct {
-	Error  string `json:"error"`
-	ID     int    `json:"id"`
-	Result struct {
-		Sid string `json:"sid"`
-	} `json:"result"`
-}
-
 func makeRequest(params string) ([]byte, error) {
 	url := urlBuilder()
 	// Params is a string above and must be turned into a byte array to be sent
@@ -103,7 +70,7 @@ func AvailableSIDS() (map[string]string, error) {
 	// Create a struct to hold the response. This allows us to see whether the
 	// response returned matches our expectations, if it doesn't then we want
 	// to return early since we can't do anything with it anyway
-	response := AvailableSIDSResponse{}
+	response := constants.AvailableSIDSResponse{}
 	if err := json.Unmarshal(b, &response); err != nil {
 		return availablesIDs, err
 	}
@@ -137,7 +104,7 @@ func GetSID(sid string) (string, error) {
 		return ``, err
 	}
 
-	sidResponse := SIDResponse{}
+	sidResponse := constants.SIDResponse{}
 	if err := json.Unmarshal(b, &sidResponse); err != nil {
 		return ``, err
 	}
@@ -155,7 +122,7 @@ func GetMenuList(sid string) (string, error) {
 		return ``, err
 	}
 
-	menuList := MenuListResponse{}
+	menuList := constants.MenuListResponse{}
 	if err := json.Unmarshal(b, &menuList); err != nil {
 		return ``, err
 	}
