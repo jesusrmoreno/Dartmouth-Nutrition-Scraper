@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	// "github.com/cheggaaa/pb"
+	"github.com/cheggaaa/pb"
 	"github.com/go-errors/errors"
 	"github.com/jesusrmoreno/nutrition-scraper/constants"
 	"io/ioutil"
@@ -262,66 +262,78 @@ func GetNutrients(sid string, r *constants.RecipeInfo) (*constants.RecipeInfo, e
 	r.Nutrients = response
 	return r, nil
 }
+
 func timeTrack(start time.Time, fn string) {
 	elapsed := time.Since(start)
 	fmt.Println(fn, "took", elapsed)
 }
+
 func main() {
+	// We want to get all Available SIDS
 	sids, err := AvailableSIDS()
 	if err != nil {
 		log.Fatal(err)
 	}
-	quit := make(chan bool)
-	venues := make(chan constants.VenueInfo)
-	for key, value := range sids {
-		fmt.Println("Starting", key, "at", time.Now())
-		go func(k, v string) {
-			defer timeTrack(time.Now(), k)
-			defer func() {
-				quit <- true
-			}()
-			info := constants.VenueInfo{}
-			sid, err := GetSID(k)
-			if err != nil {
-				panic(err)
-			}
-			info.Venue = v
-			info.Key = k
-			info.SID = sid
-			info.Menus, err = GetMenuList(sid)
-			info.Meals, err = GetMealList(sid)
-			for _, menu := range info.Menus {
-				for _, meal := range info.Meals {
-					newRecipes, err := GetRecipesMenuMealDate(sid, menu.ID, meal.ID)
-					if err != nil {
-						log.Println(err.(*errors.Error).ErrorStack())
-						return
-					}
-					info.Recipes = append(info.Recipes, newRecipes...)
-				}
-			}
+	concurrency := 15
+	startTime := time.Now()
 
-			for index := range info.Recipes {
-				fmt.Println(k, index, len(info.Recipes))
+	fmt.Println("Starting scrape at: ", startTime)
+	defer timeTrack(startTime, "Entire Scrape")
+
+	sem := make(chan bool, concurrency)
+	venues := make(chan bool)
+	defer func() { close(sem) }()
+	defer func() { close(venues) }()
+
+	for key, venue := range sids {
+		fmt.Println("Starting", key, "at:", time.Now())
+		info := constants.VenueInfo{}
+		sid, err := GetSID(key)
+		if err != nil {
+			panic(err)
+		}
+		info.Venue = venue
+		info.Key = key
+		info.SID = sid
+		info.Menus, err = GetMenuList(sid)
+		if err != nil {
+			log.Fatal(err)
+		}
+		info.Meals, err = GetMealList(sid)
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Println("Getting recipes for ", key, "at", time.Now())
+		for _, menu := range info.Menus {
+			for _, meal := range info.Meals {
+				newRecipes, err := GetRecipesMenuMealDate(sid, menu.ID, meal.ID)
+				if err != nil {
+					log.Println(err.(*errors.Error).ErrorStack())
+					return
+				}
+				info.Recipes = append(info.Recipes, newRecipes...)
+			}
+		}
+		bar := pb.StartNew(len(info.Recipes))
+		bar.ShowSpeed = true
+		bar.SetMaxWidth(80)
+		for index := range info.Recipes {
+			go func(key string, index int, info *constants.VenueInfo) {
+				defer func() {
+					<-sem
+					bar.Increment()
+				}()
 				_, err := GetNutrients(info.SID, &info.Recipes[index])
 				if err != nil {
 					log.Println(err.(*errors.Error).ErrorStack())
 				}
-			}
-			venues <- info
-			return
-		}(key, value)
-
-	}
-
-	for c := 0; c < len(sids); {
-		select {
-		case <-quit:
-			c++
-		case v := <-venues:
-			fmt.Println(v)
+			}(key, index, &info)
+			sem <- true
 		}
+		bar.FinishPrint("Done getting recipes for: " + key)
+	}
+	for i := 0; i < cap(sem); i++ {
+		sem <- true
 	}
 
-	close(quit)
 }
