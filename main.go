@@ -272,6 +272,7 @@ func main() {
 		log.Fatal(err)
 	}
 	quit := make(chan bool)
+	venues := make(chan constants.VenueInfo)
 	for key, value := range sids {
 		fmt.Println("Starting", key, "at", time.Now())
 		go func(k, v string) {
@@ -307,16 +308,20 @@ func main() {
 					log.Println(err.(*errors.Error).ErrorStack())
 				}
 			}
+			venues <- info
 			return
 		}(key, value)
+
 	}
 
 	for c := 0; c < len(sids); {
 		select {
 		case <-quit:
 			c++
+		case v := <-venues:
+			fmt.Println(v)
 		}
 	}
-	close(quit)
 
+	close(quit)
 }
