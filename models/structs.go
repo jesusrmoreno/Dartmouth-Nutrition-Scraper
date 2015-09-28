@@ -1,4 +1,4 @@
-package constants
+package models
 
 // We're making the errors a string because if there is an error we probably
 // need a code rewrite anyway... No point in doing type assertions when all

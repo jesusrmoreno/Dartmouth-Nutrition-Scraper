@@ -1,4 +1,4 @@
-package constants
+package models
 
 // AvailableSIDSRequest is the Request String to be used in getting the
 // Available sids
