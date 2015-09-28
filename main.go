@@ -3,14 +3,15 @@ package main
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
+	// "github.com/cheggaaa/pb"
+	"github.com/go-errors/errors"
 	"github.com/jesusrmoreno/nutrition-scraper/constants"
-	"github.com/kr/pretty"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"strconv"
+
 	"time"
 	"unicode/utf8"
 )
@@ -27,7 +28,7 @@ func makeRequest(params string) ([]byte, error) {
 
 	// If there is an error making the POST request return the error
 	if err != nil {
-		return []byte{}, err
+		return []byte{}, errors.Wrap(err, 1)
 	}
 
 	// Read the body into b, b will be a byte array representation of the
@@ -36,7 +37,7 @@ func makeRequest(params string) ([]byte, error) {
 
 	// If we can't read the response return err
 	if err != nil {
-		return []byte{}, err
+		return []byte{}, errors.Wrap(err, 1)
 	}
 
 	return b, nil
@@ -68,7 +69,7 @@ func AvailableSIDS() (map[string]string, error) {
 
 	b, err := makeRequest(params)
 	if err != nil {
-		return availablesIDs, err
+		return availablesIDs, errors.Wrap(err, 1)
 	}
 
 	// Create a struct to hold the response. This allows us to see whether the
@@ -76,7 +77,7 @@ func AvailableSIDS() (map[string]string, error) {
 	// to return early since we can't do anything with it anyway
 	response := constants.AvailableSIDSResponse{}
 	if err := json.Unmarshal(b, &response); err != nil {
-		return availablesIDs, err
+		return availablesIDs, errors.Wrap(err, 1)
 	}
 
 	for _, sidArray := range response.Result.Result {
@@ -89,7 +90,7 @@ func AvailableSIDS() (map[string]string, error) {
 
 	// If the map is empty we know something went wrong so we return an error.
 	if len(availablesIDs) == 0 {
-		return availablesIDs, errors.New("No new possible sids")
+		return availablesIDs, errors.Errorf("No new possible sids")
 	}
 
 	// If we made it this far then our map should contain key:value pairs
@@ -99,83 +100,223 @@ func AvailableSIDS() (map[string]string, error) {
 
 // GetSID ...
 func GetSID(sidKey string) (string, error) {
+
 	params := fmt.Sprintf(constants.GetSIDSRequest, sidKey)
 	b, err := makeRequest(params)
 
 	if err != nil {
-		return ``, err
+		return ``, errors.Wrap(err, 1)
 	}
 
 	sidResponse := constants.SIDResponse{}
 	if err := json.Unmarshal(b, &sidResponse); err != nil {
-		return ``, err
+		return ``, errors.Wrap(err, 1)
 	}
 
 	sid := sidResponse.Result.Sid
 	if utf8.RuneCountInString(sid) == 0 {
-		return ``, errors.New("No SID found")
+		return ``, errors.Errorf("No SID found")
 	}
+
 	return sid, nil
 }
 
 // GetMenuList ...
-func GetMenuList(sid string) (string, error) {
+func GetMenuList(sid string) (constants.MenuInfoSlice, error) {
+
+	menuInfos := constants.MenuInfoSlice{}
 	params := fmt.Sprintf(constants.GetMenuListRequest, sid)
 	b, err := makeRequest(params)
 	// If we can't read the response return err
 	if err != nil {
-		return ``, err
+		return menuInfos, errors.Wrap(err, 1)
 	}
 
 	menuList := constants.MenuListResponse{}
 	if err := json.Unmarshal(b, &menuList); err != nil {
-		return ``, err
+		return menuInfos, errors.Wrap(err, 1)
 	}
-	pretty.Println(menuList)
-	return ``, nil
+
+	for _, v := range menuList.Result.MenusList {
+		menu := constants.MenuInfo{
+			ID:   int(v[0].(float64)),
+			Name: v[3].(string),
+		}
+		menuInfos = append(menuInfos, menu)
+	}
+	return menuInfos, nil
 }
 
+// GetMealList ...
+func GetMealList(sid string) (constants.MealInfoSlice, error) {
+	params := fmt.Sprintf(constants.GetMealListRequest, sid)
+	mealsList := constants.MealsListResponse{}
+	b, err := makeRequest(params)
+	// Will contain all of our meal info's
+	mealInfoList := constants.MealInfoSlice{}
+	if err != nil {
+		return mealInfoList, errors.Wrap(err, 1)
+	}
+
+	if err := json.Unmarshal(b, &mealsList); err != nil {
+		return mealInfoList, errors.Wrap(err, 1)
+	}
+
+	// This is a hack to get around the formatting of the response that we get
+	// from the Dartmouth API
+	// Basically we unmarshal the json into a map because the response looks like
+	// { "1": ..., "2": ..., "n": ... } where n is variable...
+	// and instead of being a list their API returns it as object with int keys
+	// because we don't care about order we can unmarshal it into a map and loop
+	// through the keys so that we don't have to have switch statements for each
+	// menu. All in all this makes it so that there is less cognative overhead
+	// at the price of having to use interface and type casting..
+	// If the type conversion fails we return an error to remind programmer to
+	// check the format of the api response
+	for _, value := range mealsList.Result.MealsList {
+		// pretty.Println(value)
+		id, ok := value.([]interface{})[0].(float64)
+		if !ok {
+			return mealInfoList, errors.Errorf("Format of MealsList is incorrect.")
+		}
+		intID := int(id)
+
+		name, ok := value.([]interface{})[2].(string) // string
+		if !ok {
+			return mealInfoList, errors.Errorf("Format of MealsList is incorrect.")
+		}
+
+		code, ok := value.([]interface{})[4].(string) // string
+		if !ok {
+			return mealInfoList, errors.Errorf("Format of MealsList is incorrect.")
+		}
+
+		start, ok := value.([]interface{})[5].(float64)
+		if !ok {
+			return mealInfoList, errors.Errorf("Format of MealsList is incorrect.")
+		}
+		intStart := int(start)
+
+		end, ok := value.([]interface{})[6].(float64)
+		if !ok {
+			return mealInfoList, errors.Errorf("Format of MealsList is incorrect.")
+		}
+		intEnd := int(end)
+
+		mealInfo := constants.MealInfo{intID, intStart, intEnd, name, code}
+		mealInfoList = append(mealInfoList, mealInfo)
+	}
+
+	// mealInfoList = append(mealInfoList, mealOne, mealTwo)
+
+	return mealInfoList, nil
+}
+
+// GetRecipesMenuMealDate ...
+func GetRecipesMenuMealDate(sid string, menuID, mealID int) (constants.RecipeInfoSlice, error) {
+	params := fmt.Sprintf(constants.GetRecipesMenuMealDate, sid, menuID, mealID)
+	recipes := constants.RecipeInfoSlice{}
+	b, err := makeRequest(params)
+	if err != nil {
+		return recipes, errors.Wrap(err, 1)
+	}
+
+	response := constants.RecipeResponse{}
+
+	if err := json.Unmarshal(b, &response); err != nil {
+		return recipes, errors.Wrap(err, 1)
+	}
+
+	for _, recipeRaw := range response.Result.RecipeitemsList {
+
+		name := recipeRaw[0].(string)
+		category := recipeRaw[1].([]interface{})[0].(string)
+		recipeID := int(recipeRaw[1].([]interface{})[3].(float64))
+		recipeMMID := int(response.Result.MmID)
+		recipeRank := int(recipeRaw[1].([]interface{})[4].(float64))
+		recipe := constants.RecipeInfo{
+			Name:     name,
+			Category: category,
+			ID:       recipeID,
+			Rank:     recipeRank,
+			MmID:     recipeMMID,
+		}
+		recipes = append(recipes, recipe)
+	}
+
+	return recipes, nil
+}
+
+// GetNutrients ...
+func GetNutrients(sid string, r *constants.RecipeInfo) (*constants.RecipeInfo, error) {
+	params := fmt.Sprintf(constants.GetNutrientsRequest,
+		sid, r.MmID, r.ID, r.Rank)
+	b, err := makeRequest(params)
+	if err != nil {
+		return r, errors.Wrap(err, 1)
+	}
+	response := constants.NutrientInfoResponse{}
+	if err := json.Unmarshal(b, &response); err != nil {
+		return r, errors.Errorf(string(b))
+	}
+	r.Nutrients = response
+	return r, nil
+}
+func timeTrack(start time.Time, fn string) {
+	elapsed := time.Since(start)
+	fmt.Println(fn, "took", elapsed)
+}
 func main() {
 	sids, err := AvailableSIDS()
 	if err != nil {
 		log.Fatal(err)
 	}
+	quit := make(chan bool)
+	for key, value := range sids {
+		fmt.Println("Starting", key, "at", time.Now())
+		go func(k, v string) {
+			defer timeTrack(time.Now(), k)
+			defer func() {
+				quit <- true
+			}()
+			info := constants.VenueInfo{}
+			sid, err := GetSID(k)
+			if err != nil {
+				panic(err)
+			}
+			info.Venue = v
+			info.Key = k
+			info.SID = sid
+			info.Menus, err = GetMenuList(sid)
+			info.Meals, err = GetMealList(sid)
+			for _, menu := range info.Menus {
+				for _, meal := range info.Meals {
+					newRecipes, err := GetRecipesMenuMealDate(sid, menu.ID, meal.ID)
+					if err != nil {
+						log.Println(err.(*errors.Error).ErrorStack())
+						return
+					}
+					info.Recipes = append(info.Recipes, newRecipes...)
+				}
+			}
 
-	for key := range sids {
-		fmt.Println()
-		sid, err := GetSID(key)
-		// If there is an error getting the SID we want to continue getting them
-		// for others in case it is a one off thing.
-		if err != nil {
-			log.Println(err)
-			continue
-		}
-		GetMenuList(sid)
-		// time.Sleep(2 * time.Second)
-		// log.Println(key, value)
+			for index := range info.Recipes {
+				fmt.Println(k, index, len(info.Recipes))
+				_, err := GetNutrients(info.SID, &info.Recipes[index])
+				if err != nil {
+					log.Println(err.(*errors.Error).ErrorStack())
+				}
+			}
+			return
+		}(key, value)
 	}
-	// GetMenuList("Hello")
 
-	// Gets the meal times
-	// params := `{"service":"","method":"get_webmenu_meals_list","id":6,"params":[{"sid":"DDS.4ef6cc52093e2da095f926af6a241154"},"{\"remoteProcedure\":\"get_webmenu_meals_list\"}"]}`
-
-	//
-	// params := `{"service":"","method":"get_recipes_for_menumealdate","id":7,"params":[{"sid":"DDS.4ef6cc52093e2da095f926af6a241154"},"{\"menu_id\":\"27\",\"meal_id\":\"1\",\"remoteProcedure\":\"get_recipes_for_menumealdate\",\"day\":26,\"month\":9,\"year\":2015,\"use_menu_query\":true,\"order_by\":\"pubgroup-alpha\",\"cache\":true}"]}`
-
-	//
-	// params := `{"service":"","method":"get_nutrient_label_items","id":8,"params":[{"sid":"DDS.4ef6cc52093e2da095f926af6a241154"},"{\"remoteProcedure\":\"get_nutrient_label_items\",\"mm_id\":22445,\"recipe_id\":-752,\"mmr_rank\":200,\"rule\":\"fda|raw\",\"output\":\"dictionary\",\"options\":\"facts\",\"cache\":true,\"recdata\":null}"]}`
-
-	//
-	// params := `{"service":"","method":"get_recipe_sub_ingredients","id":9,"params":[{"sid":"DDS.4ef6cc52093e2da095f926af6a241154"},"{\"remoteProcedure\":\"get_recipe_sub_ingredients\",\"recipeId\":752}"]}`
-
-	//
-	// params := `{"service":"","method":"get_recipe_allergen_list","id":10,"params":[{"sid":"DDS.4ef6cc52093e2da095f926af6a241154"},"{\"remoteProcedure\":\"get_recipe_allergen_list\",\"recipeId\":752}"]}`
-	// jsonStr := []byte(params)
-	//
-	// res, _ := http.Post(url, "application/json", bytes.NewBuffer(jsonStr))
-	//
-	// // res, _ := http.Post(url, "empty")
-	// bytes, _ := ioutil.ReadAll(res.Body)
-	// log.Println(string(bytes))
+	for c := 0; c < len(sids); {
+		select {
+		case <-quit:
+			c++
+		}
+	}
+	close(quit)
 
 }
