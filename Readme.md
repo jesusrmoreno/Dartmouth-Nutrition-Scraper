@@ -12,10 +12,6 @@ information from the [Dartmouth Nutrition Website](http://nutrition.dartmouth.ed
 2. sid : Dartmouth's API uses this to indentify each venue
 3. recipe : Dartmouth's name for each of the available items at each venue
 
-## Known Issues
-The progress bars for some reason do not go up to 100%.
-However the data all seems to get filled in so this may be a non issue. Still should look into it some more.
-
 ## Requirements
 To build this program you must have Go installed. A binary is included but has only been tested on OSX.
 

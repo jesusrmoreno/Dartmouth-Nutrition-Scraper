@@ -15,8 +15,10 @@ import (
 )
 
 func scrape(c *cli.Context) {
+
 	if c.Bool("write-files") {
-		fmt.Println("Will write files when done..")
+		fmt.Println()
+		fmt.Println("Output files will be generated")
 	}
 	// We want to get all Available SIDS
 	sids, err := lib.AvailableSIDS()
@@ -24,9 +26,17 @@ func scrape(c *cli.Context) {
 		log.Fatal(err)
 	}
 
+	// Formula for number of concurrent goroutines
+	// total := (nutritionRoutines * venueRoutines) + venueRoutines
+
+	// How many nutrition routines we want to make at a time
+	nutritionRoutines := 30
+	// How many venue routines we want to open at a time
+	venueRoutines := 1
+
 	// Time tracking stuff to see how long it took to run the entire program..
 	startTime := time.Now()
-	defer lib.TimeTrack(startTime, "Entire Scrape")
+	defer lib.TimeTrack(startTime, "Scrape")
 
 	// venues is used to grab the information from the request as it finishes
 	venues := make(chan models.VenueInfo)
@@ -40,7 +50,7 @@ func scrape(c *cli.Context) {
 	// with each using 5 or so connections.
 	// Removing this limit is simple enough, just remove all reveferences to
 	// venueThrottle
-	venueThrottle := make(chan bool, 1)
+	venueThrottle := make(chan bool, venueRoutines)
 	defer close(venueThrottle)
 
 	for key, value := range sids {
@@ -62,10 +72,10 @@ func scrape(c *cli.Context) {
 			// will be the max number of connections that will get a response but
 			// setting it too high will cause their API to complain that there are
 			// too many connections open.
-			throttleRequests := make(chan bool, 30)
+			throttleRequests := make(chan bool, nutritionRoutines)
 			defer close(throttleRequests)
 
-			fmt.Println("\nWorking on:", value)
+			fmt.Println("\nGetting info for:", value)
 			info := models.VenueInfo{}
 			sid, err := lib.GetSID(key)
 			if err != nil {
@@ -132,7 +142,7 @@ func scrape(c *cli.Context) {
 
 			// Place the final info object in the venues channel
 			venues <- info
-			bar.FinishPrint("Done getting nutrition info for: " + value)
+			bar.FinishPrint("Got info for: " + value)
 		}(key, value)
 	}
 
@@ -153,6 +163,7 @@ func scrape(c *cli.Context) {
 			venueIndex++
 		}
 	}
+
 }
 
 func main() {
