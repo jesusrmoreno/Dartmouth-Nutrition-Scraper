@@ -1,16 +1,23 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/cheggaaa/pb"
+	"github.com/codegangsta/cli"
 	"github.com/go-errors/errors"
 	"github.com/jesusrmoreno/nutrition-scraper/lib"
 	"github.com/jesusrmoreno/nutrition-scraper/models"
+	"io/ioutil"
 	"log"
+	"os"
 	"time"
 )
 
-func main() {
+func scrape(c *cli.Context) {
+	if c.Bool("write-files") {
+		fmt.Println("Will write files when done..")
+	}
 	// We want to get all Available SIDS
 	sids, err := lib.AvailableSIDS()
 	if err != nil {
@@ -58,7 +65,7 @@ func main() {
 			throttleRequests := make(chan bool, 30)
 			defer close(throttleRequests)
 
-			fmt.Println("Working on:", value)
+			fmt.Println("\nWorking on:", value)
 			info := models.VenueInfo{}
 			sid, err := lib.GetSID(key)
 			if err != nil {
@@ -126,18 +133,40 @@ func main() {
 			// Place the final info object in the venues channel
 			venues <- info
 			bar.FinishPrint("Done getting nutrition info for: " + value)
-			fmt.Println()
 		}(key, value)
 	}
 
 	// We know that there are len(sids) venues to look at so we wait until we have
 	// received that many objects to quit the program.
-	for c := 0; c < len(sids); {
+	for venueIndex := 0; venueIndex < len(sids); {
 		select {
 		case venue := <-venues:
-			// We blank it right now but we'll do something with this eventually..
-			_ = venue
-			c++
+			if c.Bool("write-files") {
+				fileName := fmt.Sprintf("./output_%s.json", venue.Key)
+				// Write a file to the directory it is run under with the output
+				b, err := json.MarshalIndent(venue, "", "  ")
+				if err != nil {
+					fmt.Println("error:", err)
+				}
+				err = ioutil.WriteFile(fileName, b, 0644)
+			}
+			venueIndex++
 		}
 	}
+}
+
+func main() {
+	// CLI configuration
+	app := cli.NewApp()
+	app.Name = "nutrition-scraper"
+	app.Usage = "A tool for scraping the Dartmouth Dining Services menu."
+	app.Action = scrape
+	// Add more flags at the end of this slice
+	app.Flags = []cli.Flag{
+		cli.BoolFlag{
+			Name:  "write-files, wf",
+			Usage: "If present will write the scraped information to json files.",
+		},
+	}
+	app.Run(os.Args)
 }
