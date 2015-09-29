@@ -197,7 +197,13 @@ func GetMealList(sid string) (models.MealInfoSlice, error) {
 		}
 		intEnd := int(end)
 
-		mealInfo := models.MealInfo{intID, intStart, intEnd, name, code}
+		mealInfo := models.MealInfo{
+			ID:        intID,
+			StartTime: intStart,
+			EndTime:   intEnd,
+			Name:      name,
+			Code:      code,
+		}
 		mealInfoList = append(mealInfoList, mealInfo)
 	}
 
@@ -253,6 +259,8 @@ func GetNutrients(sid string, r *models.RecipeInfo) (*models.RecipeInfo, error) 
 	if err := json.Unmarshal(b, &response); err != nil {
 		return r, errors.Errorf(string(b))
 	}
+
+	r.VenueSID = sid
 	r.Nutrients = response
 	return r, nil
 }

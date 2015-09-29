@@ -91,6 +91,7 @@ type RecipeInfo struct {
 	ID        int
 	Rank      int
 	MmID      int
+	VenueSID  string
 	Nutrients NutrientInfoResponse
 }
 
