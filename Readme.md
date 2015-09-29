@@ -38,21 +38,22 @@ go build
 
 ## Output
 ```
-Starting scrape at:  2015-09-28 10:47:23.354492421 -0400 EDT
-Starting NOVACK at 2015-09-28 10:47:23.379001018 -0400 EDT
-Getting recipes for  NOVACK at 2015-09-28 10:47:23.405734455 -0400 EDT
-37 / 37 [=====================================================] 100.00 % 14/s 2s
-Done getting recipes for: NOVACK
-Starting DDS at 2015-09-28 10:47:26.114652518 -0400 EDT
-Getting recipes for  DDS at 2015-09-28 10:47:26.824192169 -0400 EDT
-751 / 751 [==================================================] 100.00 % 12/s 58s
-Done getting recipes for: DDS
-Starting CYC at 2015-09-28 10:48:25.935099207 -0400 EDT
-Getting recipes for  CYC at 2015-09-28 10:48:26.614847761 -0400 EDT
-1144 / 1144 [==============================================] 100.00 % 12/s 1m28s
-Done getting recipes for: CYC
-Entire Scrape took 2m34.0107052s
+go run main.go --write-files
 
+Will write files when done..
+
+Working on: Novack Cafe
+39 / 39 [=====================================================] 100.00 % 11/s 3s
+Done getting nutrition info for: Novack Cafe
+
+Working on: 53 Commons
+775 / 775 [================================================] 100.00 % 10/s 1m10s
+Done getting nutrition info for: 53 Commons
+
+Working on: Courtyard Cafe
+1148 / 1148 [==============================================] 100.00 % 11/s 1m40s
+Done getting nutrition info for: Courtyard Cafe
+Entire Scrape took 2m57.80872732s
 ```
 
 ## TODO
