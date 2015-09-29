@@ -1,19 +1,13 @@
 package main
 
 import (
-	// "bytes"
-	// "encoding/json"
 	"fmt"
 	"github.com/cheggaaa/pb"
 	"github.com/go-errors/errors"
 	"github.com/jesusrmoreno/nutrition-scraper/lib"
 	"github.com/jesusrmoreno/nutrition-scraper/models"
-	// "io/ioutil"
 	"log"
-	// "net/http"
-	// "strconv"
 	"time"
-	// "unicode/utf8"
 )
 
 func main() {
@@ -23,97 +17,127 @@ func main() {
 		log.Fatal(err)
 	}
 
-	// We can open up to 50 connections but only about 15 of them can be handled
-	// at any one time so we cap the concurrency at 15
-	concurrency := 15
-
+	// Time tracking stuff to see how long it took to run the entire program..
 	startTime := time.Now()
-	fmt.Println("Starting scrape at: ", startTime)
 	defer lib.TimeTrack(startTime, "Entire Scrape")
 
-	// sem will keep track of the number of concurrent connections and server as
-	// a semaphore
-	sem := make(chan bool, concurrency)
-
-	// venues is not used right now but will be used to work with venues as they
-	// are filled in with their information.
+	// venues is used to grab the information from the request as it finishes
 	venues := make(chan models.VenueInfo)
+	defer close(venues)
 
-	// Make sure that our channels get closed
-	defer func() { close(sem) }()
-	defer func() { close(venues) }()
+	// venueThrottle is used to throttle the requests that can be sent at once.
+	// Right now we set it to a single request because the Dartmouth API will only
+	// allowaround 15 connections at any one time and we use them all up during
+	// recipes/ It's slightly faster to do it one location at a time with each one
+	// using up the 15 connections that it is to have them running at once
+	// with each using 5 or so connections.
+	// Removing this limit is simple enough, just remove all reveferences to
+	// venueThrottle
+	venueThrottle := make(chan bool, 1)
+	defer close(venueThrottle)
 
-	for key, venue := range sids {
+	for key, value := range sids {
+		// We can a goroutine for each location to run in the background and to
+		// throttle our requests
+		go func(key, value string) {
 
-		fmt.Println("Starting", key, "at:", time.Now())
+			// Because the channel is buffered to accept only one value, feeding it
+			// with true will stop any other goroutines from running.
+			venueThrottle <- true
 
-		info := models.VenueInfo{}
-		sid, err := lib.GetSID(key)
-		if err != nil {
-			panic(err)
-		}
+			// We defer this so that when we're finished it removes one of the items
+			// from the venueThrottle channel and allows the next one in
+			defer func() { <-venueThrottle }()
 
-		info.Venue = venue
-		info.Key = key
-		info.SID = sid
+			// throttleRequests much like venueThrottle stops too many requests from
+			// firing. At this point we want to fire around 15 for so that we get
+			// 15 nutrition objects at at time. We can set it to anything and 15
+			// will be the max number of connections that will get a response but
+			// setting it too high will cause their API to complain that there are
+			// too many connections open.
+			throttleRequests := make(chan bool, 30)
+			defer close(throttleRequests)
 
-		info.Menus, err = lib.GetMenuList(sid)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		info.Meals, err = lib.GetMealList(sid)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		fmt.Println("Getting recipes for ", key, "at", time.Now())
-
-		for _, menu := range info.Menus {
-			for _, meal := range info.Meals {
-				newRecipes, err := lib.GetRecipesMenuMealDate(sid, menu.ID, meal.ID)
-				if err != nil {
-					log.Println(err.(*errors.Error).ErrorStack())
-					return
-				}
-				info.Recipes = append(info.Recipes, newRecipes...)
+			fmt.Println("Working on:", value)
+			info := models.VenueInfo{}
+			sid, err := lib.GetSID(key)
+			if err != nil {
+				panic(err)
 			}
-		}
-
-		// This section is the part that benefits the most from concurrency
-		// the top parts finish in about 5 seconds but this will take up to
-		// 15 minutes if done one by one.
-		bar := pb.StartNew(len(info.Recipes))
-		bar.ShowSpeed = true
-		bar.SetMaxWidth(80)
-		for index := range info.Recipes {
-
-			// Start a new goroutine for each nutrition request
-			go func(key string, index int, info *models.VenueInfo) {
-
-				// Read from the semaphore after we are done to free up a space for the
-				// next connection
-				bar.Increment()
-				defer func() {
-					<-sem
-				}()
-
-				_, err := lib.GetNutrients(info.SID, &info.Recipes[index])
-
-				if err != nil {
-					log.Println(err.(*errors.Error).ErrorStack())
+			info.Venue = value
+			info.Key = key
+			info.SID = sid
+			info.Menus, err = lib.GetMenuList(sid)
+			if err != nil {
+				log.Fatal(err)
+			}
+			info.Meals, err = lib.GetMealList(sid)
+			if err != nil {
+				log.Fatal(err)
+			}
+			for _, menu := range info.Menus {
+				for _, meal := range info.Meals {
+					newRecipes, err := lib.GetRecipesMenuMealDate(sid, menu.ID, meal.ID)
+					if err != nil {
+						log.Println(err.(*errors.Error).ErrorStack())
+						return
+					}
+					info.Recipes = append(info.Recipes, newRecipes...)
 				}
+			}
 
-			}(key, index, &info)
+			// Pretty progress bar stuff...
+			bar := pb.StartNew(len(info.Recipes))
+			bar.ShowSpeed = true
+			bar.SetMaxWidth(80)
+			// This section is the part that benefits the most from concurrency
+			// the top parts finish in about 5 seconds but this will take up to
+			// 15 minutes if done one by one.
+			for index := range info.Recipes {
+				// Start a new goroutine for each nutrition request
+				go func(key string, index int, info *models.VenueInfo) {
+					// Read from the semaphore after we are done to free up a space for
+					// the next connection.
+					defer func() {
+						<-throttleRequests
+						// Make the progress bar go up.
+						bar.Increment()
+					}()
 
-			sem <- true
+					// GetNutrients returns a pointer but we don't really care about it
+					// simply ignore it. We pass &info.Recipes[index] so that the actual
+					// pointer in the info object will be updated, otherwise a copy
+					// will be worked on and we won't see the result
+					_, err := lib.GetNutrients(info.SID, &info.Recipes[index])
+					if err != nil {
+						log.Println(err.(*errors.Error).ErrorStack())
+					}
 
+				}(key, index, &info)
+				/// Add our request to the list of running requests.
+				throttleRequests <- true
+			}
+
+			// We want to fill them up by default..
+			for i := 0; i < cap(throttleRequests); i++ {
+				throttleRequests <- true
+			}
+
+			// Place the final info object in the venues channel
+			venues <- info
+			bar.FinishPrint("Done getting nutrition info for: " + value)
+			fmt.Println()
+		}(key, value)
+	}
+
+	// We know that there are len(sids) venues to look at so we wait until we have
+	// received that many objects to quit the program.
+	for c := 0; c < len(sids); {
+		select {
+		case venue := <-venues:
+			// We blank it right now but we'll do something with this eventually..
+			_ = venue
+			c++
 		}
-		bar.FinishPrint("Done getting recipes for: " + key)
 	}
-
-	for i := 0; i < cap(sem); i++ {
-		sem <- true
-	}
-
 }

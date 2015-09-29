@@ -7,6 +7,11 @@ project for CS98 at Dartmouth College.
 The purpose of this scraper is to grab all the nutritional
 information from the [Dartmouth Nutrition Website](http://nutrition.dartmouth.edu:8088/)
 
+## Terminology
+1. venue : Dining Hall. eg: FoCo
+2. sid : Dartmouth's API uses this to indentify each venue
+3. recipe : Dartmouth's name for each of the available items at each venue
+
 ## Known Issues
 The progress bars for some reason do not go up to 100%.
 However the data all seems to get filled in so this may be a non issue. Still should look into it some more.
@@ -48,4 +53,6 @@ Entire Scrape took 2m34.0107052s
 
 ## TODO
 * Add database once we figure out the schema
-* Maybe add an HTTP API and frontend progress monitor
+* Maybe add an HTTP API and Frontend progress monitor
+* Add ability to get a range of dates
+* hash and skip items we've already scraped to speed up the scrape

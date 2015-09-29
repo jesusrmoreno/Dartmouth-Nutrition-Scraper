@@ -49,7 +49,7 @@ const GetRecipesMenuMealDate = `{
   "id": 7,
   "params":[{
     "sid":"%s"},
-    "{\"menu_id\":\"%d\",\"meal_id\":\"%d\",\"remoteProcedure\":\"get_recipes_for_menumealdate\",\"day\":26,\"month\":9,\"year\":2015,\"use_menu_query\":true,\"order_by\":\"pubgroup-alpha\",\"cache\":true}"]
+    "{\"menu_id\":\"%d\",\"meal_id\":\"%d\",\"remoteProcedure\":\"get_recipes_for_menumealdate\",\"day\":29,\"month\":9,\"year\":2015,\"use_menu_query\":true,\"order_by\":\"pubgroup-alpha\",\"cache\":true}"]
 }`
 
 // GetNutrientsRequest ...
