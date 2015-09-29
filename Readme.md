@@ -24,12 +24,16 @@ To build this program you must have Go installed. A binary is included but has o
 git clone https://github.com/jesusrmoreno/Dartmouth-Nutrition-Scraper scraper
 
 cd scraper
-go run main.go
+go run main.go --help
+go run main.go // will not create output files
+go run main.go --write-files // will create output files can also use --wf
 
 // Or
 
-go build main.go
-./main
+go build
+./nutrition-scraper --help
+./nutrition-scraper // will not create output files
+./nutrition-scraper --write-files // will create output files can also use --wf
 ```
 
 ## Output
