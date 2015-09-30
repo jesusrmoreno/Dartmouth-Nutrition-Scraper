@@ -70,7 +70,6 @@ func scrape(c *cli.Context) {
 			// We defer this so that when we're finished it removes one of the items
 			// from the venueThrottle channel and allows the next one in
 			defer func() { <-venueThrottle }()
-
 			// throttleRequests much like venueThrottle stops too many requests from
 			// firing. At this point we want to fire around 15 for so that we get
 			// 15 nutrition objects at at time. We can set it to anything and 15
@@ -156,12 +155,10 @@ func scrape(c *cli.Context) {
 	for venueIndex := 0; venueIndex < len(sids); {
 		select {
 		case venue := <-venues:
+			// Write a file to the directory it is run under with the output
 			if c.Bool("write-files") {
 				fileName := fmt.Sprintf("output_%s.json", venue.Key)
-
 				filePath := path.Join(pwd, fileName)
-				fmt.Println(filePath)
-				// Write a file to the directory it is run under with the output
 				b, err := json.MarshalIndent(venue, "", "  ")
 				if err != nil {
 					fmt.Println("error:", err)
