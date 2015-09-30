@@ -11,14 +11,19 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"path"
 	"time"
 )
 
 func scrape(c *cli.Context) {
+	pwd, err := os.Getwd()
+	if err != nil {
+		log.Fatal("Could not get working directory!")
+	}
 
 	if c.Bool("write-files") {
 		fmt.Println()
-		fmt.Println("Output files will be generated")
+		fmt.Println("Output files will be placed in", pwd)
 	}
 	// We want to get all Available SIDS
 	sids, err := lib.AvailableSIDS()
@@ -152,13 +157,16 @@ func scrape(c *cli.Context) {
 		select {
 		case venue := <-venues:
 			if c.Bool("write-files") {
-				fileName := fmt.Sprintf("./output_%s.json", venue.Key)
+				fileName := fmt.Sprintf("output_%s.json", venue.Key)
+
+				filePath := path.Join(pwd, fileName)
+				fmt.Println(filePath)
 				// Write a file to the directory it is run under with the output
 				b, err := json.MarshalIndent(venue, "", "  ")
 				if err != nil {
 					fmt.Println("error:", err)
 				}
-				err = ioutil.WriteFile(fileName, b, 0644)
+				err = ioutil.WriteFile(filePath, b, 0644)
 			}
 			venueIndex++
 		}
