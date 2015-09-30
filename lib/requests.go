@@ -4,11 +4,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	// "github.com/cheggaaa/pb"
 	"github.com/go-errors/errors"
 	"github.com/jesusrmoreno/nutrition-scraper/models"
 	"io/ioutil"
-	// "log"
 	"net/http"
 	"strconv"
 	"time"
@@ -222,13 +220,11 @@ func GetRecipesMenuMealDate(sid string, menuID, mealID int) (models.RecipeInfoSl
 	}
 
 	response := models.RecipeResponse{}
-
 	if err := json.Unmarshal(b, &response); err != nil {
 		return recipes, errors.Wrap(err, 1)
 	}
 
 	for _, recipeRaw := range response.Result.RecipeitemsList {
-
 		name := recipeRaw[0].(string)
 		category := recipeRaw[1].([]interface{})[0].(string)
 		recipeID := int(recipeRaw[1].([]interface{})[3].(float64))

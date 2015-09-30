@@ -20,7 +20,6 @@ func scrape(c *cli.Context) {
 	if err != nil {
 		log.Fatal("Could not get working directory!")
 	}
-
 	if c.Bool("write-files") {
 		fmt.Println()
 		fmt.Println("Output files will be placed in", pwd)
@@ -30,10 +29,8 @@ func scrape(c *cli.Context) {
 	if err != nil {
 		log.Fatal(err)
 	}
-
 	// Formula for number of concurrent goroutines
 	// total := (nutritionRoutines * venueRoutines) + venueRoutines
-
 	// How many nutrition routines we want to make at a time
 	nutritionRoutines := 30
 	// How many venue routines we want to open at a time
@@ -88,14 +85,17 @@ func scrape(c *cli.Context) {
 			info.Venue = value
 			info.Key = key
 			info.SID = sid
+
 			info.Menus, err = lib.GetMenuList(sid)
 			if err != nil {
 				log.Fatal(err)
 			}
+
 			info.Meals, err = lib.GetMealList(sid)
 			if err != nil {
 				log.Fatal(err)
 			}
+
 			for _, menu := range info.Menus {
 				for _, meal := range info.Meals {
 					newRecipes, err := lib.GetRecipesMenuMealDate(sid, menu.ID, meal.ID)
@@ -168,7 +168,6 @@ func scrape(c *cli.Context) {
 			venueIndex++
 		}
 	}
-
 }
 
 func main() {
