@@ -1,6 +1,8 @@
 package main
 
 import (
+	// "bytes"
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"github.com/cheggaaa/pb"
@@ -10,10 +12,14 @@ import (
 	"github.com/jesusrmoreno/nutrition-scraper/models"
 	"io/ioutil"
 	"log"
+	"net/http"
 	"os"
 	"path"
 	"time"
 )
+
+// const url = "https://ancient-springs-1342.herokuapp.com/api/v1/database"
+const url = "http://localhost:2015/api/v1/database"
 
 func scrape(c *cli.Context) {
 	pwd, err := os.Getwd()
@@ -155,6 +161,9 @@ func scrape(c *cli.Context) {
 	for venueIndex := 0; venueIndex < len(sids); {
 		select {
 		case venue := <-venues:
+
+			jsonStr, _ := json.Marshal(venue)
+			http.Post(url, "application/json", bytes.NewBuffer(jsonStr))
 			// Write a file to the directory it is run under with the output
 			if c.Bool("write-files") {
 				fileName := fmt.Sprintf("output_%s.json", venue.Key)
