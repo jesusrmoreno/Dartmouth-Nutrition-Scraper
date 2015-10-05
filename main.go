@@ -18,9 +18,6 @@ import (
 	"time"
 )
 
-// const url = "https://ancient-springs-1342.herokuapp.com/api/v1/database"
-const url = "http://localhost:2015/api/v1/database"
-
 func scrape(c *cli.Context) {
 	pwd, err := os.Getwd()
 	if err != nil {
@@ -30,6 +27,14 @@ func scrape(c *cli.Context) {
 		fmt.Println()
 		fmt.Println("Output files will be placed in", pwd)
 	}
+
+	url := ""
+	shouldPost := false
+	if url = c.String("post-url"); url != "" {
+		url = c.String("post-url")
+		shouldPost = true
+	}
+
 	// We want to get all Available SIDS
 	sids, err := lib.AvailableSIDS()
 	if err != nil {
@@ -162,8 +167,24 @@ func scrape(c *cli.Context) {
 		select {
 		case venue := <-venues:
 
-			jsonStr, _ := json.Marshal(venue)
-			http.Post(url, "application/json", bytes.NewBuffer(jsonStr))
+			// Post the venue as json to the provided URL. We assume the url good.
+			if shouldPost {
+
+				venueJSON, err := json.Marshal(venue)
+				if err != nil {
+					log.Println(err)
+				}
+
+				postData := bytes.NewBuffer(venueJSON)
+				log.Println("Making request!")
+				resp, err := http.Post(url, "application/json", postData)
+				log.Println(resp.StatusCode)
+				if err != nil {
+					log.Println(err)
+				}
+
+			}
+
 			// Write a file to the directory it is run under with the output
 			if c.Bool("write-files") {
 				fileName := fmt.Sprintf("output_%s.json", venue.Key)
@@ -175,6 +196,7 @@ func scrape(c *cli.Context) {
 				err = ioutil.WriteFile(filePath, b, 0644)
 			}
 			venueIndex++
+
 		}
 	}
 }
@@ -190,6 +212,10 @@ func main() {
 		cli.BoolFlag{
 			Name:  "write-files, wf",
 			Usage: "If present will write the scraped information to json files.",
+		},
+		cli.StringFlag{
+			Name:  "post-url, url",
+			Usage: "If present will post to this url when finished.",
 		},
 	}
 	app.Run(os.Args)
