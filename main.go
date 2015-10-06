@@ -196,7 +196,6 @@ func scrape(c *cli.Context) {
 				err = ioutil.WriteFile(filePath, b, 0644)
 			}
 			venueIndex++
-
 		}
 	}
 }
