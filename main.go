@@ -166,25 +166,21 @@ func scrape(c *cli.Context) {
 	for venueIndex := 0; venueIndex < len(sids); {
 		select {
 		case venue := <-venues:
-
 			// Post the venue as json to the provided URL. We assume the url good.
 			if shouldPost {
-
 				venueJSON, err := json.Marshal(venue)
 				if err != nil {
 					log.Println(err)
 				}
-
 				postData := bytes.NewBuffer(venueJSON)
 				log.Println("Making request!")
 				resp, err := http.Post(url, "application/json", postData)
-				log.Println(resp.StatusCode)
 				if err != nil {
 					log.Println(err)
+				} else {
+					log.Println(resp.StatusCode)
 				}
-
 			}
-
 			// Write a file to the directory it is run under with the output
 			if c.Bool("write-files") {
 				fileName := fmt.Sprintf("output_%s.json", venue.Key)

@@ -55,18 +55,18 @@ type RecipeResponse struct {
 
 // VenueInfo ...
 type VenueInfo struct {
-	SID     string
-	Venue   string
-	Key     string
-	Menus   MenuInfoSlice
-	Meals   MealInfoSlice
-	Recipes RecipeInfoSlice
+	SID     string          `json:"sid"`
+	Venue   string          `json:"venue"`
+	Key     string          `json:"key"`
+	Menus   MenuInfoSlice   `json:"menus"`
+	Meals   MealInfoSlice   `json:"meals"`
+	Recipes RecipeInfoSlice `json:"recipes"`
 }
 
 // MenuInfo ...
 type MenuInfo struct {
-	ID   int
-	Name string
+	ID   int    `json:"id"`
+	Name string `json:"name"`
 }
 
 // MenuInfoSlice ...
@@ -74,11 +74,11 @@ type MenuInfoSlice []MenuInfo
 
 // MealInfo ...
 type MealInfo struct {
-	ID        int
-	StartTime int
-	EndTime   int
-	Name      string
-	Code      string
+	ID        int    `json:"id"`
+	StartTime int    `json:"startTime"`
+	EndTime   int    `json:"endTime"`
+	Name      string `json:"name"`
+	Code      string `json:"code"`
 }
 
 // MealInfoSlice ...
@@ -86,13 +86,13 @@ type MealInfoSlice []MealInfo
 
 // RecipeInfo ...
 type RecipeInfo struct {
-	Name      string
-	Category  string
-	ID        int
-	Rank      int
-	MmID      int
-	VenueSID  string
-	Nutrients NutrientInfoResponse
+	Name      string               `json:"name"`
+	Category  string               `json:"category"`
+	ID        int                  `json:"id"`
+	Rank      int                  `json:"rank"`
+	MmID      int                  `json:"mmId"`
+	VenueSID  string               `json:"venueSID"`
+	Nutrients NutrientInfoResponse `json:"nutrients"`
 }
 
 // RecipeInfoSlice ...

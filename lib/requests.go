@@ -205,8 +205,6 @@ func GetMealList(sid string) (models.MealInfoSlice, error) {
 		mealInfoList = append(mealInfoList, mealInfo)
 	}
 
-	// mealInfoList = append(mealInfoList, mealOne, mealTwo)
-
 	return mealInfoList, nil
 }
 
