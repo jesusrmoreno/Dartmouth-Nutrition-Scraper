@@ -1,5 +1,9 @@
 package models
 
+import (
+	"time"
+)
+
 // We're making the errors a string because if there is an error we probably
 // need a code rewrite anyway... No point in doing type assertions when all
 // we need to know is whether or not an error exists.
@@ -92,6 +96,9 @@ type RecipeInfo struct {
 	Rank      int                  `json:"rank"`
 	MmID      int                  `json:"mmId"`
 	VenueSID  string               `json:"venueSID"`
+	Date      time.Time            `json:"date"`
+	MealID    int                  `json:"mealId"`
+	MenuID    int                  `json:"menuId"`
 	Nutrients NutrientInfoResponse `json:"nutrients"`
 }
 

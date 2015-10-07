@@ -4,13 +4,14 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"github.com/go-errors/errors"
-	"github.com/jesusrmoreno/nutrition-scraper/models"
 	"io/ioutil"
 	"net/http"
 	"strconv"
 	"time"
 	"unicode/utf8"
+
+	"github.com/go-errors/errors"
+	"github.com/jesusrmoreno/nutrition-scraper/models"
 )
 
 // makeRequest is a helper function that takes the parameters as a string and
@@ -90,8 +91,8 @@ func AvailableSIDS() (map[string]string, error) {
 	return availablesIDs, nil
 }
 
-// GetSID ...
-func GetSID(sidKey string) (string, error) {
+// SID ...
+func SID(sidKey string) (string, error) {
 
 	params := fmt.Sprintf(models.GetSIDSRequest, sidKey)
 	b, err := makeRequest(params)
@@ -113,8 +114,8 @@ func GetSID(sidKey string) (string, error) {
 	return sid, nil
 }
 
-// GetMenuList ...
-func GetMenuList(sid string) (models.MenuInfoSlice, error) {
+// MenuList ...
+func MenuList(sid string) (models.MenuInfoSlice, error) {
 
 	menuInfos := models.MenuInfoSlice{}
 	params := fmt.Sprintf(models.GetMenuListRequest, sid)
@@ -139,8 +140,9 @@ func GetMenuList(sid string) (models.MenuInfoSlice, error) {
 	return menuInfos, nil
 }
 
-// GetMealList ...
-func GetMealList(sid string) (models.MealInfoSlice, error) {
+// MealList gets the list of meals from the Dartmouth Nutrition API; It takes
+// the sid for the venue.
+func MealList(sid string) (models.MealInfoSlice, error) {
 	params := fmt.Sprintf(models.GetMealListRequest, sid)
 	mealsList := models.MealsListResponse{}
 	b, err := makeRequest(params)
@@ -208,9 +210,18 @@ func GetMealList(sid string) (models.MealInfoSlice, error) {
 	return mealInfoList, nil
 }
 
-// GetRecipesMenuMealDate ...
-func GetRecipesMenuMealDate(sid string, menuID, mealID int) (models.RecipeInfoSlice, error) {
-	params := fmt.Sprintf(models.GetRecipesMenuMealDate, sid, menuID, mealID)
+// RecipesMenuMealDate gets the recipes for the provided menu, meal, and date.
+// It takes the menu, meal ids and a time object.
+func RecipesMenuMealDate(sid string, menu, meal int, date time.Time) (models.RecipeInfoSlice, error) {
+
+	// Year and day are returned as ints but Month is a string.
+	// It doesn't really since when it converts into an int it will be the
+	// corresponding month number..
+	year, month, day := date.Date()
+
+	params := fmt.
+		Sprintf(models.RecipesMenuMealDate, sid, menu, meal, day, month, year)
+
 	recipes := models.RecipeInfoSlice{}
 	b, err := makeRequest(params)
 	if err != nil {
@@ -234,6 +245,9 @@ func GetRecipesMenuMealDate(sid string, menuID, mealID int) (models.RecipeInfoSl
 			ID:       recipeID,
 			Rank:     recipeRank,
 			MmID:     recipeMMID,
+			MealID:   meal,
+			MenuID:   menu,
+			Date:     date,
 		}
 		recipes = append(recipes, recipe)
 	}
@@ -242,9 +256,9 @@ func GetRecipesMenuMealDate(sid string, menuID, mealID int) (models.RecipeInfoSl
 }
 
 // GetNutrients ...
-func GetNutrients(sid string, r *models.RecipeInfo) (*models.RecipeInfo, error) {
+func GetNutrients(id string, r *models.RecipeInfo) (*models.RecipeInfo, error) {
 	params := fmt.Sprintf(models.GetNutrientsRequest,
-		sid, r.MmID, r.ID, r.Rank)
+		id, r.MmID, r.ID, r.Rank)
 	b, err := makeRequest(params)
 	if err != nil {
 		return r, errors.Wrap(err, 1)
@@ -254,7 +268,7 @@ func GetNutrients(sid string, r *models.RecipeInfo) (*models.RecipeInfo, error) 
 		return r, errors.Errorf(string(b))
 	}
 
-	r.VenueSID = sid
+	r.VenueSID = id
 	r.Nutrients = response
 	return r, nil
 }

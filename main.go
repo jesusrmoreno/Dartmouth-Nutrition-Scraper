@@ -1,21 +1,21 @@
 package main
 
 import (
-	// "bytes"
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"github.com/cheggaaa/pb"
-	"github.com/codegangsta/cli"
-	"github.com/go-errors/errors"
-	"github.com/jesusrmoreno/nutrition-scraper/lib"
-	"github.com/jesusrmoreno/nutrition-scraper/models"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
 	"path"
 	"time"
+
+	"github.com/cheggaaa/pb"
+	"github.com/codegangsta/cli"
+	"github.com/go-errors/errors"
+	"github.com/jesusrmoreno/nutrition-scraper/lib"
+	"github.com/jesusrmoreno/nutrition-scraper/models"
 )
 
 func scrape(c *cli.Context) {
@@ -43,7 +43,7 @@ func scrape(c *cli.Context) {
 	// Formula for number of concurrent goroutines
 	// total := (nutritionRoutines * venueRoutines) + venueRoutines
 	// How many nutrition routines we want to make at a time
-	nutritionRoutines := 30
+	nutritionRoutines := 15
 	// How many venue routines we want to open at a time
 	venueRoutines := 1
 
@@ -65,6 +65,8 @@ func scrape(c *cli.Context) {
 	// venueThrottle
 	venueThrottle := make(chan bool, venueRoutines)
 	defer close(venueThrottle)
+
+	currentDate := time.Now()
 
 	for key, value := range sids {
 		// We can a goroutine for each location to run in the background and to
@@ -89,7 +91,7 @@ func scrape(c *cli.Context) {
 
 			fmt.Println("\nGetting info for:", value)
 			info := models.VenueInfo{}
-			sid, err := lib.GetSID(key)
+			sid, err := lib.SID(key)
 			if err != nil {
 				panic(err)
 			}
@@ -97,19 +99,20 @@ func scrape(c *cli.Context) {
 			info.Key = key
 			info.SID = sid
 
-			info.Menus, err = lib.GetMenuList(sid)
+			info.Menus, err = lib.MenuList(sid)
 			if err != nil {
 				log.Fatal(err)
 			}
 
-			info.Meals, err = lib.GetMealList(sid)
+			info.Meals, err = lib.MealList(sid)
 			if err != nil {
 				log.Fatal(err)
 			}
 
 			for _, menu := range info.Menus {
 				for _, meal := range info.Meals {
-					newRecipes, err := lib.GetRecipesMenuMealDate(sid, menu.ID, meal.ID)
+					newRecipes, err := lib.
+						RecipesMenuMealDate(sid, menu.ID, meal.ID, currentDate)
 					if err != nil {
 						log.Println(err.(*errors.Error).ErrorStack())
 						return
@@ -163,7 +166,7 @@ func scrape(c *cli.Context) {
 
 	// We know that there are len(sids) venues to look at so we wait until we have
 	// received that many objects to quit the program.
-	for venueIndex := 0; venueIndex < len(sids); {
+	for {
 		select {
 		case venue := <-venues:
 			// Post the venue as json to the provided URL. We assume the url good.
@@ -191,7 +194,6 @@ func scrape(c *cli.Context) {
 				}
 				err = ioutil.WriteFile(filePath, b, 0644)
 			}
-			venueIndex++
 		}
 	}
 }

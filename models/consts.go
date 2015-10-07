@@ -42,14 +42,14 @@ const GetMealListRequest = `{
   "{\"remoteProcedure\":\"get_webmenu_meals_list\"}"]
 }`
 
-// GetRecipesForMenuMealDate ...
-const GetRecipesMenuMealDate = `{
+// RecipesForMenuMealDate ...
+const RecipesMenuMealDate = `{
   "service": "",
   "method": "get_recipes_for_menumealdate",
   "id": 7,
   "params":[{
     "sid":"%s"},
-    "{\"menu_id\":\"%d\",\"meal_id\":\"%d\",\"remoteProcedure\":\"get_recipes_for_menumealdate\",\"day\":29,\"month\":9,\"year\":2015,\"use_menu_query\":true,\"order_by\":\"pubgroup-alpha\",\"cache\":true}"]
+    "{\"menu_id\":\"%d\",\"meal_id\":\"%d\",\"remoteProcedure\":\"get_recipes_for_menumealdate\",\"day\":%d,\"month\":%d,\"year\":%d,\"use_menu_query\":true,\"order_by\":\"pubgroup-alpha\",\"cache\":true}"]
 }`
 
 // GetNutrientsRequest ...
