@@ -57,13 +57,23 @@ type RecipeResponse struct {
 
 // VenueInfo ...
 type VenueInfo struct {
-	SID     string          `json:"sid"`
-	Venue   string          `json:"venue"`
-	Key     string          `json:"key"`
-	Menus   MenuInfoSlice   `json:"menus"`
-	Meals   MealInfoSlice   `json:"meals"`
-	Recipes RecipeInfoSlice `json:"recipes"`
+	SID           string          `json:"sid"`
+	Venue         string          `json:"venue"`
+	Key           string          `json:"key"`
+	Menus         MenuInfoSlice   `json:"-"`
+	Meals         MealInfoSlice   `json:"-"`
+	MenuMealPairs MenuMealSlice   `json:"menuMealPairs"`
+	Recipes       RecipeInfoSlice `json:"recipes"`
 }
+
+// MenuMeal ...
+type MenuMeal struct {
+	Menu MenuInfo `json:"menu"`
+	Meal MealInfo `json:"meal"`
+}
+
+// MenuMealSlice ...
+type MenuMealSlice []MenuMeal
 
 // MenuInfo ...
 type MenuInfo struct {

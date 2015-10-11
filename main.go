@@ -117,6 +117,14 @@ func scrape(c *cli.Context) {
 						log.Println(err.(*errors.Error).ErrorStack())
 						return
 					}
+
+					if len(newRecipes) > 0 {
+						info.MenuMealPairs = append(info.MenuMealPairs, models.MenuMeal{
+							Menu: menu,
+							Meal: meal,
+						})
+					}
+
 					info.Recipes = append(info.Recipes, newRecipes...)
 				}
 			}
