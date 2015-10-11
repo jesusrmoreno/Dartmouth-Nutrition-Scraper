@@ -1,8 +1,6 @@
 package models
 
-import (
-	"time"
-)
+import "time"
 
 // We're making the errors a string because if there is an error we probably
 // need a code rewrite anyway... No point in doing type assertions when all
@@ -92,11 +90,14 @@ type MealInfoSlice []MealInfo
 type RecipeInfo struct {
 	Name      string               `json:"name"`
 	Category  string               `json:"category"`
-	ID        int                  `json:"id"`
+	ID        int                  `json:"did"`
 	Rank      int                  `json:"rank"`
 	MmID      int                  `json:"mmId"`
 	VenueSID  string               `json:"venueSID"`
+	Month     int                  `json:"month"`
 	Date      time.Time            `json:"date"`
+	Day       int                  `json:"day"`
+	Year      int                  `json:"year"`
 	MealID    int                  `json:"mealId"`
 	MenuID    int                  `json:"menuId"`
 	Nutrients NutrientInfoResponse `json:"nutrients"`

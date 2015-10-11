@@ -181,6 +181,7 @@ func scrape(c *cli.Context) {
 				if err != nil {
 					log.Println(err)
 				} else {
+					log.Println(resp)
 					log.Println(resp.StatusCode)
 				}
 			}

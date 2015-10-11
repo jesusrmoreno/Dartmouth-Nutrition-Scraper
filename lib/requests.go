@@ -215,8 +215,7 @@ func MealList(sid string) (models.MealInfoSlice, error) {
 func RecipesMenuMealDate(sid string, menu, meal int, date time.Time) (models.RecipeInfoSlice, error) {
 
 	// Year and day are returned as ints but Month is a string.
-	// It doesn't really since when it converts into an int it will be the
-	// corresponding month number..
+	// when it converts into an int it will be the corresponding month number..
 	year, month, day := date.Date()
 
 	params := fmt.
@@ -248,6 +247,9 @@ func RecipesMenuMealDate(sid string, menu, meal int, date time.Time) (models.Rec
 			MealID:   meal,
 			MenuID:   menu,
 			Date:     date,
+			Month:    int(month),
+			Year:     year,
+			Day:      day,
 		}
 		recipes = append(recipes, recipe)
 	}
