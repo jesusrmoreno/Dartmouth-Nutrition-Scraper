@@ -57,19 +57,19 @@ type RecipeResponse struct {
 
 // VenueInfo ...
 type VenueInfo struct {
-	SID           string          `json:"sid"`
-	Venue         string          `json:"venue"`
-	Key           string          `json:"key"`
-	Menus         MenuInfoSlice   `json:"-"`
-	Meals         MealInfoSlice   `json:"-"`
-	MenuMealPairs MenuMealSlice   `json:"menuMealPairs"`
-	Recipes       RecipeInfoSlice `json:"recipes"`
+	SID       string          `json:"sid"`
+	Venue     string          `json:"venue"`
+	Key       string          `json:"key"`
+	Menus     MenuInfoSlice   `json:"-"`
+	Meals     MealInfoSlice   `json:"-"`
+	MealsList MenuMealSlice   `json:"meals"`
+	Recipes   RecipeInfoSlice `json:"recipes"`
 }
 
 // MenuMeal ...
 type MenuMeal struct {
-	Menu MenuInfo `json:"menu"`
-	Meal MealInfo `json:"meal"`
+	Meal  MealInfo      `json:"meal"`
+	Menus MenuInfoSlice `json:"menus"`
 }
 
 // MenuMealSlice ...
@@ -77,7 +77,7 @@ type MenuMealSlice []MenuMeal
 
 // MenuInfo ...
 type MenuInfo struct {
-	ID   int    `json:"id"`
+	ID   int    `json:"did"`
 	Name string `json:"name"`
 }
 
@@ -86,7 +86,7 @@ type MenuInfoSlice []MenuInfo
 
 // MealInfo ...
 type MealInfo struct {
-	ID        int    `json:"id"`
+	ID        int    `json:"did"`
 	StartTime int    `json:"startTime"`
 	EndTime   int    `json:"endTime"`
 	Name      string `json:"name"`
@@ -119,7 +119,7 @@ type RecipeInfoSlice []RecipeInfo
 // NutrientInfoResponse ...
 type NutrientInfoResponse struct {
 	Error  interface{} `json:"error"`
-	ID     int         `json:"id"`
+	ID     int         `json:"did"`
 	Result struct {
 		VitaIu               string      `json:"vita_iu"`
 		Vitb6P               string      `json:"vitb6_p"`
