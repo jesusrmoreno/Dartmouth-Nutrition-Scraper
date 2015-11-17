@@ -10,9 +10,19 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"crypto/md5"
+	"encoding/hex"
+
 	"github.com/go-errors/errors"
 	"github.com/jesusrmoreno/nutrition-scraper/models"
 )
+
+// GetMD5Hash ...
+func GetMD5Hash(text string) string {
+	hasher := md5.New()
+	hasher.Write([]byte(text))
+	return hex.EncodeToString(hasher.Sum(nil))
+}
 
 // makeRequest is a helper function that takes the parameters as a string and
 // executes the http request returning any errors, or nil and the body as a

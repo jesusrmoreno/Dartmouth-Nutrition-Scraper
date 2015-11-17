@@ -57,6 +57,7 @@ type RecipeResponse struct {
 
 // VenueInfo ...
 type VenueInfo struct {
+	Date      time.Time       `json:"date"`
 	SID       string          `json:"sid"`
 	Venue     string          `json:"venue"`
 	Key       string          `json:"key"`
@@ -118,8 +119,6 @@ type RecipeInfoSlice []RecipeInfo
 
 // NutrientInfoResponse ...
 type NutrientInfoResponse struct {
-	Error  interface{} `json:"error"`
-	ID     int         `json:"did"`
 	Result struct {
 		VitaIu               string      `json:"vita_iu"`
 		Vitb6P               string      `json:"vitb6_p"`
