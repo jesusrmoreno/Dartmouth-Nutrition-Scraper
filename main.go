@@ -9,14 +9,21 @@ import (
 	"runtime"
 	"time"
 
-	log "github.com/Sirupsen/logrus"
+	"github.com/Sirupsen/logrus"
 	"github.com/cheggaaa/pb"
 	"github.com/codegangsta/cli"
 	"github.com/go-errors/errors"
 	"github.com/jesusrmoreno/nutrition-scraper/lib"
 	"github.com/jesusrmoreno/nutrition-scraper/models"
 	"github.com/jesusrmoreno/parse"
+	prefixed "github.com/x-cray/logrus-prefixed-formatter"
 )
+
+var log = logrus.New()
+
+func init() {
+	log.Formatter = new(prefixed.TextFormatter)
+}
 
 // State ...
 type State struct {
@@ -26,51 +33,76 @@ type State struct {
 	Offerings map[string]bool
 }
 
+func getRecipesFromParse(s *State, limit int) []models.ParseRecipe {
+	if limit > 1000 {
+		log.Warn("Parse has a max return limit of 1000 objects.")
+		log.Warn("Using 1000 as the limit")
+		limit = 1000
+	}
+	returnRecipes := []models.ParseRecipe{}
+	skipValue := 0
+	for {
+		rawRecipes := []models.ParseRecipe{}
+		status, errs := s.DB.Get(parse.Params{
+			Class: "Recipe",
+			Limit: limit,
+			Skip:  skipValue,
+		}, &rawRecipes)
+		if errs != nil {
+			log.Fatal("Could not get recipes, status:", status)
+		}
+		skipValue += limit
+		if len(rawRecipes) == 0 {
+			break
+		}
+		returnRecipes = append(returnRecipes, rawRecipes...)
+	}
+	return returnRecipes
+}
+
+func getOfferingsFromParse(s *State, limit int) []models.ParseOffering {
+	if limit > 1000 {
+		log.Warn("Parse has a max return limit of 1000 objects.")
+		log.Warn("Using 1000 as the limit")
+		limit = 1000
+	}
+	returnOfferings := []models.ParseOffering{}
+	skipValue := 0
+	for {
+		dbOfferings := []models.ParseOffering{}
+		status, errs := s.DB.Get(parse.Params{
+			Class: "Offering",
+			Limit: limit,
+			Skip:  skipValue,
+		}, &dbOfferings)
+		if errs != nil {
+			log.Fatal("Could not get offerings, status:", status)
+		}
+		skipValue += limit
+		if len(dbOfferings) == 0 {
+			break
+		}
+		returnOfferings = append(returnOfferings, dbOfferings...)
+	}
+	return returnOfferings
+}
+
 // InitParse ...
 func InitParse(s *State) {
-	recipes := []models.ParseRecipe{}
-	i := 0
-	for {
-		rRecipes := []models.ParseRecipe{}
-		_, errs := s.DB.Get(parse.Params{
-			Class: "Recipe",
-			Limit: 1000,
-			Skip:  i * 1000,
-		}, &rRecipes)
-		if errs != nil {
-			log.Fatal(errs)
-		}
-		i++
-		if len(rRecipes) == 0 {
-			break
-		}
-		recipes = append(recipes, rRecipes...)
-	}
-	for _, recipe := range recipes {
-		s.Recipes[recipe.DartmouthID] = recipe
+	dbRecipes := getRecipesFromParse(s, 1000)
+	for _, dbRecipe := range dbRecipes {
+		s.Recipes[dbRecipe.DartmouthID] = dbRecipe
 	}
 
-	offerings := []models.ParseOffering{}
-	i = 0
-	for {
-		rOffering := []models.ParseOffering{}
-		_, errs := s.DB.Get(parse.Params{
-			Class: "Offering",
-			Limit: 1000,
-			Skip:  i * 1000,
-		}, &rOffering)
-		if errs != nil {
-			log.Fatal(errs)
-		}
-		i++
-		if len(rOffering) == 0 {
-			break
-		}
-		offerings = append(offerings, rOffering...)
+	dbOfferings := getOfferingsFromParse(s, 1000)
+	for _, dbOffering := range dbOfferings {
+		s.Offerings[dbOffering.UUID] = true
 	}
-	for _, offering := range offerings {
-		s.Offerings[offering.UUID] = true
-	}
+
+	log.WithFields(logrus.Fields{
+		"Recipes":   len(dbRecipes),
+		"Offerings": len(dbOfferings),
+	}).Info("In Database")
 }
 
 func mmRecipes(s *State, meal, menu int, rs models.RecipeInfoSlice) []string {
@@ -100,7 +132,8 @@ func saveToParse(s *State, v models.VenueInfo) {
 	var duplicates, new int
 	for _, recipe := range u {
 		if s.Recipes[recipe.ID].DartmouthID != recipe.ID {
-			s.DB.Post(models.ParseRecipe{
+
+			returnObj, status, errs := s.DB.Post(models.ParseRecipe{
 				Name:        recipe.Name,
 				Category:    recipe.Category,
 				DartmouthID: recipe.ID,
@@ -109,14 +142,24 @@ func saveToParse(s *State, v models.VenueInfo) {
 				Nutrients:   recipe.Nutrients,
 				Class:       "Recipe",
 			})
+			if errs != nil {
+				log.Error(status)
+				log.Error(errors.Errorf("Unable to post recipe with ID: %d", recipe.ID))
+				continue
+			}
+			returnedRecipe := returnObj.(models.ParseRecipe)
+			s.Recipes[recipe.ID] = returnedRecipe
+			log.Info("Created new recipe with objectId: ", returnedRecipe.ObjectID())
 			new++
 		} else {
 			duplicates++
 		}
 	}
-	log.Println("New Recipes:", new)
-	log.Println("Dup Recipes:", duplicates)
-	InitParse(s)
+
+	log.WithFields(logrus.Fields{
+		"Saved":     new,
+		"Duplicate": duplicates,
+	}).Info("Scraped Recipes")
 
 	offers := []models.ParseOffering{}
 	duplicates, new = 0, 0
@@ -151,11 +194,20 @@ func saveToParse(s *State, v models.VenueInfo) {
 		}
 	}
 	for _, o := range offers {
-		s.DB.Post(o)
+		returnObj, status, errs := s.DB.Post(o)
+		if errs != nil {
+			log.Error(status)
+			log.Error(errors.Errorf("Unable to post recipe with ID: %s", o.UUID))
+			continue
+		}
+		offering := returnObj.(models.ParseOffering)
+		s.Offerings[offering.UUID] = true
+		log.Info("Created new offering with objectId: ", offering.ObjectID())
 	}
-	log.Println("New Offerings:", new)
-	log.Println("Dup Offerings:", duplicates)
-	InitParse(s)
+	log.WithFields(logrus.Fields{
+		"Saved":     new,
+		"Duplicate": duplicates,
+	}).Info("Scraped Offerings")
 }
 
 func scrape(c *cli.Context) {
@@ -170,9 +222,11 @@ func scrape(c *cli.Context) {
 		Nutrients: make(map[int]bool),
 		Offerings: make(map[string]bool),
 	}
-	InitParse(&s)
+
 	if c.Bool("mock") {
-		file, err := os.Open("output_CYC.json")
+		log.Info("Mocked Scrape")
+		InitParse(&s)
+		file, err := os.Open("output_DDS.json")
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -181,8 +235,10 @@ func scrape(c *cli.Context) {
 			log.Fatal(err)
 		}
 		saveToParse(&s, info)
+		log.Info("End Mocked Scrape")
 		return
 	}
+	InitParse(&s)
 	pwd, err := os.Getwd()
 	if err != nil {
 		log.Fatal("Could not get working directory!")
@@ -343,6 +399,7 @@ func scrape(c *cli.Context) {
 }
 
 func main() {
+
 	// CLI configuration
 	runtime.GOMAXPROCS(runtime.NumCPU())
 	app := cli.NewApp()
