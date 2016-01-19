@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/Sirupsen/logrus"
-	"github.com/cheggaaa/pb"
 	"github.com/codegangsta/cli"
 	"github.com/go-errors/errors"
 	"github.com/jesusrmoreno/nutrition-scraper/lib"
@@ -30,7 +29,7 @@ type State struct {
 	DB        *parse.Client
 	Recipes   map[int]models.ParseRecipe
 	Nutrients map[int]bool
-	Offerings map[string]bool
+	Offerings map[string]models.ParseOffering
 }
 
 func getRecipesFromParse(s *State, limit int) []models.ParseRecipe {
@@ -58,6 +57,13 @@ func getRecipesFromParse(s *State, limit int) []models.ParseRecipe {
 		returnRecipes = append(returnRecipes, rawRecipes...)
 	}
 	return returnRecipes
+}
+
+func offeringExists(s *State, vK string, m, ml string, d time.Time) bool {
+	uuidStr := fmt.Sprintf("%d%d%d%s%s%s",
+		d.Day(), int(d.Month()), d.Year(), m, ml, vK)
+	uuid := lib.GetMD5Hash(uuidStr)
+	return s.Offerings[uuid].ObjectID() != ""
 }
 
 func getOfferingsFromParse(s *State, limit int) []models.ParseOffering {
@@ -93,12 +99,10 @@ func InitParse(s *State) {
 	for _, dbRecipe := range dbRecipes {
 		s.Recipes[dbRecipe.DartmouthID] = dbRecipe
 	}
-
 	dbOfferings := getOfferingsFromParse(s, 1000)
 	for _, dbOffering := range dbOfferings {
-		s.Offerings[dbOffering.UUID] = true
+		s.Offerings[dbOffering.UUID] = dbOffering
 	}
-
 	log.WithFields(logrus.Fields{
 		"Recipes":   len(dbRecipes),
 		"Offerings": len(dbOfferings),
@@ -127,29 +131,74 @@ func uniqueRecipes(rs models.RecipeInfoSlice) []models.RecipeInfo {
 	return unique
 }
 
-func saveToParse(s *State, v models.VenueInfo) {
+// SetDietaryInfo ...
+func SetDietaryInfo(n *models.NutrientInfoResponse, title string) *models.NutrientInfoResponse {
+	info := models.TitleToProps(title)
+	for _, item := range info {
+		switch item {
+		case "l/o":
+			n.Result.Vegetarian = true
+		case "gf":
+			n.Result.Gluten = true
+		case "r":
+			n.Result.Local = true
+		case "k":
+			n.Result.Kosher = true
+		case "h":
+			n.Result.Halal = true
+		case "v":
+			n.Result.Vegan = true
+		case "e":
+			n.Result.Eggs = true
+		case "f":
+			n.Result.Fish = true
+		case "d":
+			n.Result.Dairy = true
+		case "n":
+			n.Result.TreeNuts = true
+		case "p":
+			n.Result.Peanuts = true
+		case "pk":
+			n.Result.Pork = true
+		case "sb":
+			n.Result.Soy = true
+		case "sf":
+			n.Result.ShellFish = true
+		case "w":
+			n.Result.Wheat = true
+		}
+	}
+	return n
+}
+
+func saveRecipes(s *State, v models.VenueInfo) {
 	u := uniqueRecipes(v.Recipes)
 	var duplicates, new int
 	for _, recipe := range u {
 		if s.Recipes[recipe.ID].DartmouthID != recipe.ID {
-
+			c := models.CreatedBy{
+				Kind:      "Pointer",
+				ClassName: "_User",
+				ObjectID:  "95xfYTL7GG",
+			}
 			returnObj, status, errs := s.DB.Post(models.ParseRecipe{
-				Name:        recipe.Name,
+				Name:        models.RemoveMetaData(recipe.Name),
 				Category:    recipe.Category,
 				DartmouthID: recipe.ID,
 				Rank:        recipe.Rank,
-				UUID:        lib.GetMD5Hash(recipe.Name),
-				Nutrients:   recipe.Nutrients,
+				UUID:        lib.GetMD5Hash(models.RemoveMetaData(recipe.Name)),
+				Nutrients:   *SetDietaryInfo(&recipe.Nutrients, recipe.Name),
 				Class:       "Recipe",
+				CreatedBy:   c,
 			})
-			if errs != nil {
+			if errs != nil || status == 400 {
 				log.Error(status)
 				log.Error(errors.Errorf("Unable to post recipe with ID: %d", recipe.ID))
 				continue
 			}
 			returnedRecipe := returnObj.(models.ParseRecipe)
 			s.Recipes[recipe.ID] = returnedRecipe
-			log.Info("Created new recipe with objectId: ", returnedRecipe.ObjectID())
+			log.Debug("Created new recipe with objectId: ", returnedRecipe.ObjectID())
 			new++
 		} else {
 			duplicates++
@@ -160,18 +209,22 @@ func saveToParse(s *State, v models.VenueInfo) {
 		"Saved":     new,
 		"Duplicate": duplicates,
 	}).Info("Scraped Recipes")
+}
 
+func saveOfferings(s *State, v models.VenueInfo) {
 	offers := []models.ParseOffering{}
-	duplicates, new = 0, 0
+	duplicates, new := 0, 0
 	for _, item := range v.MealsList {
 		meal := item.Meal
 		for _, menu := range item.Menus {
 			day := v.Date.Day()
 			month := int(v.Date.Month())
 			year := v.Date.Year()
-			uuidStr := fmt.Sprintf("%d%d%d%s%s%s", day, month, year, menu.Name, meal.Name, v.Key)
+			uuidStr := fmt.Sprintf(
+				"%d%d%d%s%s%s", day, month, year, menu.Name, meal.Name, v.Key)
 			uuid := lib.GetMD5Hash(uuidStr)
-			if s.Offerings[uuid] == false {
+
+			if s.Offerings[uuid].ObjectID() == "" {
 				rs := mmRecipes(s, meal.ID, menu.ID, v.Recipes)
 				offer := models.ParseOffering{
 					Venue:    v.Key,
@@ -201,8 +254,8 @@ func saveToParse(s *State, v models.VenueInfo) {
 			continue
 		}
 		offering := returnObj.(models.ParseOffering)
-		s.Offerings[offering.UUID] = true
-		log.Info("Created new offering with objectId: ", offering.ObjectID())
+		s.Offerings[offering.UUID] = offering
+		log.Debug("Created new offering with objectId: ", offering.ObjectID())
 	}
 	log.WithFields(logrus.Fields{
 		"Saved":     new,
@@ -210,7 +263,45 @@ func saveToParse(s *State, v models.VenueInfo) {
 	}).Info("Scraped Offerings")
 }
 
+func saveToParse(s *State, v models.VenueInfo) {
+	saveRecipes(s, v)
+	saveOfferings(s, v)
+}
+
+// NameToNutrientMigration ...
+func NameToNutrientMigration(s *State) {
+	for _, recipe := range s.Recipes {
+		recipe.Nutrients = *SetDietaryInfo(&recipe.Nutrients, recipe.Name)
+		fmt.Println(models.RemoveMetaData(recipe.Name))
+		recipe.Name = models.RemoveMetaData(recipe.Name)
+
+		x := struct {
+			Name      string                      `json:"name"`
+			Nutrients models.NutrientInfoResponse `json:"nutrients"`
+			ID        string                      `json:"objectId"`
+			UUID      string                      `json:"uuid"`
+		}{
+			Name:      models.RemoveMetaData(recipe.Name),
+			Nutrients: *SetDietaryInfo(&recipe.Nutrients, recipe.Name),
+			ID:        recipe.ObjectID(),
+			UUID:      lib.GetMD5Hash(models.RemoveMetaData(recipe.Name)),
+		}
+		xString, _ := json.Marshal(x)
+		fmt.Println(string(xString))
+		_, status, errs := s.DB.Put(x, "Recipe", recipe.ID)
+
+		if errs != nil || status == 400 {
+			log.Error(status)
+			log.Error(errs)
+			log.Error(errors.Errorf("Unable to post recipe with ID: %s", recipe.ID))
+			break
+		}
+		// time.Sleep(1 * time.Second)
+	}
+}
+
 func scrape(c *cli.Context) {
+	log.Info("Initializing Scraper")
 	p := parse.Client{
 		BaseURL:       "https://api.parse.com/1",
 		ApplicationID: "BAihtNGpVTx4IJsuuFV5f9LibJGnD1ZBOsnXk9qp",
@@ -220,7 +311,14 @@ func scrape(c *cli.Context) {
 		DB:        &p,
 		Recipes:   make(map[int]models.ParseRecipe),
 		Nutrients: make(map[int]bool),
-		Offerings: make(map[string]bool),
+		Offerings: make(map[string]models.ParseOffering),
+	}
+
+	if c.Bool("nameNutrientMigration") {
+		fmt.Println("Running Migration...")
+		InitParse(&s)
+		NameToNutrientMigration(&s)
+		return
 	}
 
 	if c.Bool("mock") {
@@ -261,28 +359,25 @@ func scrape(c *cli.Context) {
 	}
 
 	dateArray := []time.Time{}
-	fmt.Println("Will try to scrape for:")
 	for i := 0; i < 7; i++ {
 		dateToAdd := date.AddDate(0, 0, i)
-		fmt.Println("  ", dateToAdd.Format(template))
 		dateArray = append(dateArray, dateToAdd)
 	}
-	fmt.Println()
-
 	shouldPost := c.Bool("save")
 
-	// Time tracking stuff to see how long it took to run the entire program..
-	startTime := time.Now()
-	defer lib.TimeTrack(startTime, "Scrape")
-
 	for _, date := range dateArray {
-		fmt.Println("Scraping info for:", date.Format(template))
+		log.WithFields(logrus.Fields{
+			"date": date.Format(template),
+		}).Info("Start Scrape")
 
 		// We want to get all Available SIDS
 		sids, err := lib.AvailableSIDS()
 		if err != nil {
 			log.Fatal(err)
 		}
+		log.WithFields(logrus.Fields{
+			"count": len(sids),
+		}).Info("SIDS")
 
 		// How many nutrition routines we want to make at a time
 		nutritionRoutines := 50
@@ -291,14 +386,16 @@ func scrape(c *cli.Context) {
 			throttleRequests := make(chan bool, nutritionRoutines)
 			defer close(throttleRequests)
 
-			fmt.Println("Getting info for:", value)
+			log.WithFields(logrus.Fields{
+				"venue": key,
+			}).Info("Venue Scrape")
 
 			info := models.VenueInfo{
 				Date: date,
 			}
 			sid, err := lib.SID(key)
 			if err != nil {
-				log.Println("[ERROR]", err)
+				log.Error(err)
 				continue
 			}
 
@@ -307,15 +404,21 @@ func scrape(c *cli.Context) {
 			info.SID = sid
 
 			info.Menus, err = lib.MenuList(sid)
+			log.WithFields(logrus.Fields{
+				"count": len(info.Menus),
+			}).Info("Got Menus")
 			if err != nil {
-				log.Println("[ERROR]", err)
+				log.Error(err)
 				continue
 			}
 
 			info.Meals, err = lib.MealList(sid)
 			if err != nil {
-				log.Println("[ERROR]", err)
+				log.Error(err)
 			}
+			log.WithFields(logrus.Fields{
+				"count": len(info.Meals),
+			}).Info("Got Meals")
 
 			for _, meal := range info.Meals {
 				menuMeal := models.MenuMeal{
@@ -323,11 +426,20 @@ func scrape(c *cli.Context) {
 					Menus: models.MenuInfoSlice{},
 				}
 				for _, menu := range info.Menus {
+					if offeringExists(&s, info.Key, menu.Name, meal.Name, date) {
+						log.WithFields(logrus.Fields{
+							"meal":  meal.ID,
+							"menu":  menu.ID,
+							"venue": info.Key,
+							"date":  date.Format(template),
+						}).Info("Offering Exists")
+						continue
+					}
 					newRecipes, err := lib.
 						RecipesMenuMealDate(sid, menu.ID, meal.ID, date)
 					if err != nil {
-						log.Println(err.(*errors.Error).ErrorStack())
-						return
+						log.Error(err)
+						continue
 					}
 					if len(newRecipes) > 0 {
 						menuMeal.Menus = append(menuMeal.Menus, menu)
@@ -337,23 +449,18 @@ func scrape(c *cli.Context) {
 				info.MealsList = append(info.MealsList, menuMeal)
 			}
 
-			// Pretty progress bar stuff...
-			bar := pb.StartNew(len(info.Recipes))
-			bar.ShowSpeed = true
-			bar.SetMaxWidth(80)
 			// This section is the part that benefits the most from concurrency
 			// the top parts finish in about 5 seconds but this will take up to
 			// 15 minutes if done one by one.
+			log.WithFields(logrus.Fields{
+				"count": len(info.Recipes),
+			}).Info("Start Recipe Scrape")
 			for index := range info.Recipes {
 				// Start a new goroutine for each nutrition request
 				go func(key string, index int, info *models.VenueInfo) {
 					// Read from the semaphore after we are done to free up a space for
 					// the next connection.
-					defer func() {
-						<-throttleRequests
-						// Make the progress bar go up.
-						bar.Increment()
-					}()
+					defer func() { <-throttleRequests }()
 
 					// GetNutrients returns a pointer but we don't really care about it
 					// simply ignore it. We pass &info.Recipes[index] so that the actual
@@ -361,7 +468,7 @@ func scrape(c *cli.Context) {
 					// will be worked on and we won't see the result
 					_, err := lib.GetNutrients(info.SID, &info.Recipes[index])
 					if err != nil {
-						log.Println(err.(*errors.Error).ErrorStack())
+						log.Error(err)
 					}
 
 				}(key, index, &info)
@@ -374,10 +481,15 @@ func scrape(c *cli.Context) {
 				throttleRequests <- true
 			}
 
-			bar.FinishPrint("Got info for: " + value)
+			log.WithFields(logrus.Fields{
+				"count": len(info.Recipes),
+			}).Info("Finish Recipe Scrape")
 			if shouldPost {
 				saveToParse(&s, info)
 			}
+			log.WithFields(logrus.Fields{
+				"venue": info.Key,
+			}).Info("Finish Venue Scrape")
 			// Write a file to the directory it is run under with the output
 			if c.Bool("write-files") {
 				fileName := fmt.Sprintf("output_%s.json", info.Key)
@@ -399,14 +511,13 @@ func scrape(c *cli.Context) {
 }
 
 func main() {
-
 	// CLI configuration
 	runtime.GOMAXPROCS(runtime.NumCPU())
 	app := cli.NewApp()
 	app.Name = "nutrition-scraper"
 	app.Usage = "A tool for scraping the Dartmouth Dining Services menu."
 	app.Action = scrape
-	app.Version = "0.1.9"
+	app.Version = "0.1.10"
 	// Add more flags at the end of this slice
 	app.Flags = []cli.Flag{
 		cli.BoolFlag{
@@ -416,6 +527,10 @@ func main() {
 		cli.BoolFlag{
 			Name:  "mock",
 			Usage: "Will use output_CYC.json data to post. Must also use --url",
+		},
+		cli.BoolFlag{
+			Name:  "nameNutrientMigration",
+			Usage: "Will migrate the recipes...",
 		},
 		cli.StringFlag{
 			Name:  "startDate, sd",

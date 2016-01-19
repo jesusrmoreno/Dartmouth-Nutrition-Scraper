@@ -182,5 +182,20 @@ type NutrientInfoResponse struct {
 		Folacin              string      `json:"folacin"`
 		ServingsPerContainer string      `json:"servings_per_container"`
 		Pufa                 string      `json:"pufa"`
+		Vegetarian           bool        `json:"vegetarian"`
+		Gluten               bool        `json:"glutenFree"`
+		Local                bool        `json:"local"`
+		Kosher               bool        `json:"kosher"`
+		Halal                bool        `json:"halal"`
+		Vegan                bool        `json:"vegan"`
+		Eggs                 bool        `json:"eggs"`
+		Fish                 bool        `json:"fish"`
+		Dairy                bool        `json:"dairy"`
+		TreeNuts             bool        `json:"treeNuts"`
+		Peanuts              bool        `json:"peanuts"`
+		Pork                 bool        `json:"pork"`
+		Soy                  bool        `json:"soy"`
+		ShellFish            bool        `json:"shellFish"`
+		Wheat                bool        `json:"wheat"`
 	} `json:"result"`
 }

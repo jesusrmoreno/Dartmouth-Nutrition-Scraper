@@ -74,6 +74,13 @@ func (o ParseOffering) JSON() (string, error) {
 	return string(j), err
 }
 
+// CreatedBy ....
+type CreatedBy struct {
+	Kind      string `json:"__type"`
+	ClassName string `json:"className"`
+	ObjectID  string `json:"objectId"`
+}
+
 // ParseRecipe ...
 type ParseRecipe struct {
 	ID          string               `json:"objectId"`
@@ -86,6 +93,7 @@ type ParseRecipe struct {
 	Rank        int                  `json:"rank"`
 	UUID        string               `json:"uuid"`
 	Nutrients   NutrientInfoResponse `json:"nutrients"`
+	CreatedBy   CreatedBy            `json:"createdBy"`
 }
 
 // JSON ...
@@ -189,6 +197,21 @@ type ParseNutrients struct {
 	Folacin              string    `json:"folacin"`
 	ServingsPerContainer string    `json:"servings_per_container"`
 	Pufa                 string    `json:"pufa"`
+	Vegetarian           bool      `json:"vegetarian"`
+	Gluten               bool      `json:"glutenFree"`
+	Local                bool      `json:"local"`
+	Kosher               bool      `json:"kosher"`
+	Halal                bool      `json:"halal"`
+	Vegan                bool      `json:"vegan"`
+	Eggs                 bool      `json:"eggs"`
+	Fish                 bool      `json:"fish"`
+	Dairy                bool      `json:"dairy"`
+	TreeNuts             bool      `json:"treeNuts"`
+	Peanuts              bool      `json:"peanutes"`
+	Pork                 bool      `json:"pork"`
+	Soy                  bool      `json:"soy"`
+	ShellFish            bool      `json:"shellFish"`
+	Wheat                bool      `json:"wheat"`
 }
 
 // ClassName ...
