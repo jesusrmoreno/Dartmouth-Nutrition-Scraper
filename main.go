@@ -391,12 +391,6 @@ func scrape(c *cli.Context) {
 		Notifications: make(map[string]models.ParseNotification),
 	}
 
-	if c.Bool("subscriptions") {
-		// InitParse(&s)
-		getSubscriptionsFromParse(&s, 100)
-		return
-	}
-
 	if c.Bool("nameNutrientMigration") {
 		fmt.Println("Running Migration...")
 		InitParse(&s)
@@ -746,10 +740,6 @@ func main() {
 		},
 		cli.BoolFlag{
 			Name:  "save",
-			Usage: "Include to save to parse",
-		},
-		cli.BoolFlag{
-			Name:  "subscriptions",
 			Usage: "Include to save to parse",
 		},
 	}
