@@ -26,13 +26,44 @@ func init() {
 
 // State ...
 type State struct {
-	DB        *parse.Client
-	Recipes   map[int]models.ParseRecipe
-	Nutrients map[int]bool
-	Offerings map[string]models.ParseOffering
+	DB            *parse.Client
+	Recipes       map[int]models.ParseRecipe
+	Nutrients     map[int]bool
+	Offerings     map[string]models.ParseOffering
+	Subscriptions map[int][]string
+	Notifications map[string]bool
 }
 
-func getSubscriptionsFromParse(s *State, limit int) {
+func getNotificationsFromParse(s *State, limit int) []models.ParseNotification {
+	if limit > 1000 {
+		log.Warn("Parse has a max return limit of 1000 objects.")
+		log.Warn("Using 1000 as the limit")
+		limit = 1000
+	}
+	skipValue := 0
+	notifications := []models.ParseNotification{}
+	for {
+		newNotifications := []models.ParseNotification{}
+		status, errs := s.DB.Get(parse.Params{
+			Class: "Notification",
+			Limit: limit,
+			Skip:  skipValue,
+		}, &newNotifications)
+
+		if errs != nil {
+			log.Fatal("Could not get notifications, status:", status)
+		}
+		skipValue += limit
+
+		if len(newNotifications) == 0 {
+			break
+		}
+		notifications = append(notifications, newNotifications...)
+	}
+	return notifications
+}
+
+func getSubscriptionsFromParse(s *State, limit int) models.SubscriptionSlice {
 	if limit > 1000 {
 		log.Warn("Parse has a max return limit of 1000 objects.")
 		log.Warn("Using 1000 as the limit")
@@ -40,18 +71,25 @@ func getSubscriptionsFromParse(s *State, limit int) {
 	}
 	skipValue := 0
 	subscriptions := models.SubscriptionSlice{}
+	for {
+		newSubscriptions := models.SubscriptionSlice{}
+		status, errs := s.DB.Get(parse.Params{
+			Class: "Subscription",
+			Limit: limit,
+			Skip:  skipValue,
+		}, &newSubscriptions)
 
-	status, errs := s.DB.Get(parse.Params{
-		Class: "Subscription",
-		Limit: limit,
-		Skip:  skipValue,
-	}, &subscriptions)
+		if errs != nil {
+			log.Fatal("Could not get subscriptions, status:", status)
+		}
+		skipValue += limit
 
-	if errs != nil {
-		log.Fatal("Could not get subscriptions, status:", status)
+		if len(newSubscriptions) == 0 {
+			break
+		}
+		subscriptions = append(subscriptions, newSubscriptions...)
 	}
-	skipValue += limit
-	fmt.Println(subscriptions)
+	return subscriptions
 }
 
 func getRecipesFromParse(s *State, limit int) []models.ParseRecipe {
@@ -121,10 +159,24 @@ func InitParse(s *State) {
 	for _, dbRecipe := range dbRecipes {
 		s.Recipes[dbRecipe.DartmouthID] = dbRecipe
 	}
+
 	dbOfferings := getOfferingsFromParse(s, 1000)
 	for _, dbOffering := range dbOfferings {
 		s.Offerings[dbOffering.UUID] = dbOffering
 	}
+
+	dbSubscriptions := getSubscriptionsFromParse(s, 1000)
+	for _, sub := range dbSubscriptions {
+		for _, recipe := range sub.Recipes {
+			s.Subscriptions[recipe] = append(s.Subscriptions[recipe], sub.User.ObjectID)
+		}
+	}
+
+	dbNotifications := getNotificationsFromParse(s, 1000)
+	for _, not := range dbNotifications {
+		s.Notifications[not.UUID] = true
+	}
+
 	log.WithFields(logrus.Fields{
 		"Recipes":   len(dbRecipes),
 		"Offerings": len(dbOfferings),
@@ -329,11 +381,14 @@ func scrape(c *cli.Context) {
 		ApplicationID: "BAihtNGpVTx4IJsuuFV5f9LibJGnD1ZBOsnXk9qp",
 		Key:           "zJYR2d3dFN3bXL6vUANZyoVLZ3bcTF7fpXTCrU7s",
 	}
+
 	s := State{
-		DB:        &p,
-		Recipes:   make(map[int]models.ParseRecipe),
-		Nutrients: make(map[int]bool),
-		Offerings: make(map[string]models.ParseOffering),
+		DB:            &p,
+		Recipes:       make(map[int]models.ParseRecipe),
+		Nutrients:     make(map[int]bool),
+		Offerings:     make(map[string]models.ParseOffering),
+		Subscriptions: make(map[int][]string),
+		Notifications: make(map[string]bool),
 	}
 
 	if c.Bool("subscriptions") {
@@ -392,7 +447,7 @@ func scrape(c *cli.Context) {
 		dateArray = append(dateArray, dateToAdd)
 	}
 	shouldPost := c.Bool("save")
-
+	notificationsToCreate := []models.Notification{}
 	for _, date := range dateArray {
 		log.WithFields(logrus.Fields{
 			"date": date.Format(template),
@@ -413,11 +468,9 @@ func scrape(c *cli.Context) {
 		for key, value := range sids {
 			throttleRequests := make(chan bool, nutritionRoutines)
 			defer close(throttleRequests)
-
 			log.WithFields(logrus.Fields{
 				"venue": key,
 			}).Info("Venue Scrape")
-
 			info := models.VenueInfo{
 				Date: date,
 			}
@@ -454,6 +507,29 @@ func scrape(c *cli.Context) {
 					Menus: models.MenuInfoSlice{},
 				}
 				for _, menu := range info.Menus {
+					newRecipes, err := lib.
+						RecipesMenuMealDate(sid, menu.ID, meal.ID, date)
+					if err != nil {
+						log.Error(err)
+						continue
+					}
+					for _, recipe := range newRecipes {
+						if len(s.Subscriptions[recipe.ID]) > 0 {
+							notificationsToCreate = append(notificationsToCreate, models.Notification{
+								RecipeID: recipe.ID,
+								Name:     models.RemoveMetaData(recipe.Name),
+								Day:      date.Day(),
+								Month:    int(date.Month()),
+								Year:     date.Year(),
+								OnDate:   date,
+								MenuName: menu.Name,
+								MealName: meal.Name,
+								Venue:    info.Key,
+							})
+						}
+					}
+					// We need to scrape the recipes so that we can create notifications
+					// but if the offering exists then we can just skip everything else
 					if offeringExists(&s, info.Key, menu.Name, meal.Name, date) {
 						log.WithFields(logrus.Fields{
 							"meal":  meal.ID,
@@ -461,12 +537,7 @@ func scrape(c *cli.Context) {
 							"venue": info.Key,
 							"date":  date.Format(template),
 						}).Info("Offering Exists")
-						continue
-					}
-					newRecipes, err := lib.
-						RecipesMenuMealDate(sid, menu.ID, meal.ID, date)
-					if err != nil {
-						log.Error(err)
+						// newRecipes, err := lib.RecipesMenuMealDate(sid, menu.ID, meal.ID, date)
 						continue
 					}
 					if len(newRecipes) > 0 {
@@ -533,9 +604,79 @@ func scrape(c *cli.Context) {
 					continue
 				}
 			}
-			fmt.Println()
 		}
 	}
+	ns := createNotifications(&s, notificationsToCreate)
+	saveNotifications(&s, ns)
+}
+
+func saveNotifications(s *State, ns []models.ParseNotification) {
+	throttleRequests := make(chan bool, 20)
+	skipped := 0
+	defer func(throttleRequests chan bool) {
+		close(throttleRequests)
+		fmt.Println("Duplicates: ", skipped)
+	}(throttleRequests)
+
+	// We want to fill them up by default..
+	for _, n := range ns {
+		if !s.Notifications[n.UUID] {
+			go func(n models.ParseNotification) {
+				defer func() {
+					<-throttleRequests
+				}()
+				_, status, errs := s.DB.Post(n)
+				if errs != nil {
+					fmt.Print(status)
+					fmt.Print(errors.Errorf("Unable to post Notification with ID: %s", n.RecipeID))
+				}
+			}(n)
+			throttleRequests <- true
+		} else {
+			skipped++
+		}
+	}
+
+	for i := 0; i < cap(throttleRequests); i++ {
+		throttleRequests <- false
+	}
+}
+
+func createNotifications(s *State, ns []models.Notification) []models.ParseNotification {
+	// We do concurrency here because it takes a while for the uuid to be
+	// calculated and we need to handle a lot of notification creation at a time
+	notificationChan := make(chan models.ParseNotification)
+	go func() {
+		for _, n := range ns {
+			for _, userID := range s.Subscriptions[n.RecipeID] {
+				p := models.ParseNotification{
+					Class:    "Notification",
+					RecipeID: n.RecipeID,
+					Name:     n.Name,
+					Day:      n.Day,
+					Month:    n.Month,
+					Year:     n.Year,
+					OnDate:   n.OnDate,
+					MenuName: n.MenuName,
+					MealName: n.MealName,
+					Venue:    n.Venue,
+					For: models.CreatedBy{
+						Kind:      "Pointer",
+						ClassName: "_User",
+						ObjectID:  userID,
+					},
+				}
+				p.UUID = p.GenerateUUID()
+				notificationChan <- p
+			}
+		}
+		close(notificationChan)
+	}()
+	toPost := []models.ParseNotification{}
+	for p := range notificationChan {
+		toPost = append(toPost, p)
+	}
+	return toPost
 }
 
 func main() {
