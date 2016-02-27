@@ -18,14 +18,15 @@ type ParseOffering struct {
 	MealName string `json:"mealName"`
 	Recipes  struct {
 		Op      string   `json:"__op"`
-		Objects []object `json:"objects"`
+		Objects []Object `json:"objects"`
 	} `json:"recipes"`
 	Class   string    `json:"-"`
 	Created time.Time `json:"-"`
 	UUID    string    `json:"uuid"`
 }
 
-type object struct {
+// Object ...
+type Object struct {
 	Type      string `json:"__type"`
 	Classname string `json:"className"`
 	ObjectID  string `json:"objectId"`
@@ -34,7 +35,7 @@ type object struct {
 // AddRecipe ...
 func (o *ParseOffering) AddRecipe(objectID string) {
 	o.Recipes.Op = "AddRelation"
-	o.Recipes.Objects = append(o.Recipes.Objects, object{
+	o.Recipes.Objects = append(o.Recipes.Objects, Object{
 		Type:      "Pointer",
 		Classname: "Recipe",
 		ObjectID:  objectID,

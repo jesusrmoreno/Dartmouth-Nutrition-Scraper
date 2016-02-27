@@ -22,23 +22,29 @@ type Notification struct {
 	Venue    string    `json:"venueKey"`
 }
 
+// DateObject ...
+type DateObject struct {
+	Type string    `json:"__type"`
+	ISO  time.Time `json:"iso"`
+}
+
 // ParseNotification object
 type ParseNotification struct {
-	UUID     string    `json:"uuid"`
-	ID       string    `json:"objectId"`
-	Class    string    `json:"-"`
-	RecipeID int       `json:"recipeID"`
-	Name     string    `json:"recipeName"`
-	Day      int       `json:"day"`
-	Month    int       `json:"month"`
-	Year     int       `json:"year"`
-	Seen     bool      `json:"seen"`
-	For      CreatedBy `json:"for"`
-	OnDate   time.Time `json:"onDate"`
-	MenuName string    `json:"menuName"`
-	MealName string    `json:"mealName"`
-	Venue    string    `json:"venueKey"`
-	Created  time.Time `json:"createdAt"`
+	UUID     string     `json:"uuid"`
+	ID       string     `json:"objectId"`
+	Class    string     `json:"-"`
+	RecipeID int        `json:"recipeID"`
+	Name     string     `json:"recipeName"`
+	Day      int        `json:"day"`
+	Month    int        `json:"month"`
+	Year     int        `json:"year"`
+	Seen     bool       `json:"seen"`
+	For      CreatedBy  `json:"for"`
+	OnDate   DateObject `json:"onDate"`
+	MenuName string     `json:"menuName"`
+	MealName string     `json:"mealName"`
+	Venue    string     `json:"venueKey"`
+	Created  time.Time  `json:"createdAt"`
 }
 
 // GenerateUUID gives UUID

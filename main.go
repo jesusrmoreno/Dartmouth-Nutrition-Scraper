@@ -31,7 +31,7 @@ type State struct {
 	Nutrients     map[int]bool
 	Offerings     map[string]models.ParseOffering
 	Subscriptions map[int][]string
-	Notifications map[string]bool
+	Notifications map[string]models.ParseNotification
 }
 
 func getNotificationsFromParse(s *State, limit int) []models.ParseNotification {
@@ -174,7 +174,7 @@ func InitParse(s *State) {
 
 	dbNotifications := getNotificationsFromParse(s, 1000)
 	for _, not := range dbNotifications {
-		s.Notifications[not.UUID] = true
+		s.Notifications[not.UUID] = not
 	}
 
 	log.WithFields(logrus.Fields{
@@ -388,7 +388,7 @@ func scrape(c *cli.Context) {
 		Nutrients:     make(map[int]bool),
 		Offerings:     make(map[string]models.ParseOffering),
 		Subscriptions: make(map[int][]string),
-		Notifications: make(map[string]bool),
+		Notifications: make(map[string]models.ParseNotification),
 	}
 
 	if c.Bool("subscriptions") {
@@ -608,6 +608,7 @@ func scrape(c *cli.Context) {
 	}
 	ns := createNotifications(&s, notificationsToCreate)
 	saveNotifications(&s, ns)
+	removeOldNotifications(&s)
 }
 
 func saveNotifications(s *State, ns []models.ParseNotification) {
@@ -617,18 +618,20 @@ func saveNotifications(s *State, ns []models.ParseNotification) {
 		close(throttleRequests)
 		fmt.Println("Duplicates: ", skipped)
 	}(throttleRequests)
-
 	// We want to fill them up by default..
 	for _, n := range ns {
-		if !s.Notifications[n.UUID] {
+		if s.Notifications[n.UUID].UUID != n.UUID {
 			go func(n models.ParseNotification) {
 				defer func() {
 					<-throttleRequests
 				}()
 				_, status, errs := s.DB.Post(n)
+				if status == 200 || status == 201 {
+					fmt.Println("Successfully created notification with ID:", n.UUID)
+				}
 				if errs != nil {
 					fmt.Print(status)
-					fmt.Print(errors.Errorf("Unable to post Notification with ID: %s", n.RecipeID))
+					fmt.Print(errors.Errorf("Unable to post Notification with ID: %d", n.RecipeID))
 				}
 			}(n)
 			throttleRequests <- true
@@ -636,7 +639,40 @@ func saveNotifications(s *State, ns []models.ParseNotification) {
 			skipped++
 		}
 	}
+	for i := 0; i < cap(throttleRequests); i++ {
+		throttleRequests <- false
+	}
+}
 
+func removeOldNotifications(s *State) {
+	throttleRequests := make(chan bool, 20)
+	defer close(throttleRequests)
+	toDelete := []models.ParseNotification{}
+	for _, n := range s.Notifications {
+		// Deletes things from the day before gives a day leway...
+		if n.OnDate.ISO.Before(time.Now().AddDate(0, 0, -1)) {
+			toDelete = append(toDelete, n)
+		}
+	}
+	for _, n := range toDelete {
+		go func(n models.ParseNotification) {
+			defer func() {
+				<-throttleRequests
+			}()
+			status, errs := s.DB.Delete(parse.Params{
+				Class:    "Notification",
+				ObjectID: n.ObjectID(),
+			}, nil)
+			if status == 200 || status == 201 {
+				fmt.Println("Successfully deleted notification with ID:", n.UUID)
+			}
+			if errs != nil {
+				fmt.Print(status)
+				fmt.Print(errors.Errorf("Unable to delete Notification with ID: %s", n.UUID))
+			}
+		}(n)
+		throttleRequests <- true
+	}
 	for i := 0; i < cap(throttleRequests); i++ {
 		throttleRequests <- false
 	}
@@ -656,7 +692,10 @@ func createNotifications(s *State, ns []models.Notification) []models.ParseNotif
 					Day:      n.Day,
 					Month:    n.Month,
 					Year:     n.Year,
-					OnDate:   n.OnDate,
+					OnDate: models.DateObject{
+						Type: "Date",
+						ISO:  n.OnDate,
+					},
 					MenuName: n.MenuName,
 					MealName: n.MealName,
 					Venue:    n.Venue,
