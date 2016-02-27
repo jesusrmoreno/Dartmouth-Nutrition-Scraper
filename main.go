@@ -32,6 +32,28 @@ type State struct {
 	Offerings map[string]models.ParseOffering
 }
 
+func getSubscriptionsFromParse(s *State, limit int) {
+	if limit > 1000 {
+		log.Warn("Parse has a max return limit of 1000 objects.")
+		log.Warn("Using 1000 as the limit")
+		limit = 1000
+	}
+	skipValue := 0
+	subscriptions := models.SubscriptionSlice{}
+
+	status, errs := s.DB.Get(parse.Params{
+		Class: "Subscription",
+		Limit: limit,
+		Skip:  skipValue,
+	}, &subscriptions)
+
+	if errs != nil {
+		log.Fatal("Could not get subscriptions, status:", status)
+	}
+	skipValue += limit
+	fmt.Println(subscriptions)
+}
+
 func getRecipesFromParse(s *State, limit int) []models.ParseRecipe {
 	if limit > 1000 {
 		log.Warn("Parse has a max return limit of 1000 objects.")
@@ -314,6 +336,12 @@ func scrape(c *cli.Context) {
 		Offerings: make(map[string]models.ParseOffering),
 	}
 
+	if c.Bool("subscriptions") {
+		// InitParse(&s)
+		getSubscriptionsFromParse(&s, 100)
+		return
+	}
+
 	if c.Bool("nameNutrientMigration") {
 		fmt.Println("Running Migration...")
 		InitParse(&s)
@@ -538,6 +566,10 @@ func main() {
 		},
 		cli.BoolFlag{
 			Name:  "save",
+			Usage: "Include to save to parse",
+		},
+		cli.BoolFlag{
+			Name:  "subscriptions",
 			Usage: "Include to save to parse",
 		},
 	}
